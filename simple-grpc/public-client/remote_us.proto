@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+service RemoteService {
+    rpc authenticate(RemoteAuthRequest) returns (RemoteAuthResponse);
+}
+
+message RemoteAuthRequest {
+    string username = 2;
+    string password = 3;
+}
+
+message RemoteUser {
+    string userId = 1;
+    string username = 2;
+    string email = 3;
+}
+
+message RemoteAuthResponse {
+    string status = 1;
+    string message = 2;
+    RemoteUser user = 3;
+}

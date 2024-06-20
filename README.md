@@ -1,1 +1,0 @@
-# grpc-remote-user-store

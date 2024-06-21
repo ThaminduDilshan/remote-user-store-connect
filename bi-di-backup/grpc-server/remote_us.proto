@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+service RemoteBiDiService {
+    rpc communicate(stream RemoteResponse) returns (stream RemoteRequest);
+    rpc authenticate(AuthenticationRequest) returns (AuthenticationResponse);
+}
+
+message RemoteRequest {
+    string uuid = 1;
+    string type = 2;
+    google.protobuf.Struct data = 3;
+}
+
+message RemoteResponse {
+    string uuid = 1;
+    string status = 2;
+    string message = 3;
+    google.protobuf.Struct data = 4;
+}
+
+message AuthenticationRequest {
+    string username = 1;
+    string password = 2;
+    string organization = 3;
+}
+
+message AuthenticationResponse {
+    string status = 1;
+    string message = 2;
+    google.protobuf.Struct data = 3;
+}

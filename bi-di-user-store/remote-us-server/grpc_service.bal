@@ -2,9 +2,8 @@ import ballerina/grpc;
 import ballerina/time;
 import ballerina/log;
 import ballerina/uuid;
-import ballerina/io;
 
-string server_id = "server";
+final string server_id = "server";
 
 @grpc:Descriptor {
     value: REMOTE_US_DESC
@@ -15,21 +14,34 @@ service "RemoteUserStore" on new grpc:Listener(9090) {
                                 stream<RemoteMessage, error?> clientStream) returns error? {
 
         // Organization of the client.
-        string organization = "testorg";
+        RemoteClientData remoteClientData = {
+            id: "",
+            organization: ""
+        };
         
         // Start sending remote requests in another strand.
-        // TODO: Need to check why this is not getting called.
-        future<error?> f1 = start sendRemoteMessages(caller, organization);
+        future<error?> f1 = start sendRemoteMessages(caller, remoteClientData);
 
         do {
             _ = check from RemoteMessage message in clientStream
                 do {
                     if message.operationType === CLIENT_CONNECT {
-                        log:printInfo("Client connected to the server.");
-                    } else if message.operationType === SERVER_HEART_BEAT_ACK {
-                        log:printInfo("Heart beat ack received from the client.");
+                        remoteClientData.id = message.id;
+                        remoteClientData.organization = message.organization;
+
+                        log:printInfo("Client: " + message.id + " of organization: " + remoteClientData.organization 
+                            + " connected to the server.");
+
+                        RemoteMessage connectResponse = {
+                            operationType: SERVER_CONNECT,
+                            id: server_id
+                        };
+                        checkpanic caller->sendRemoteMessage(connectResponse);
+                        
+                    } else if message.operationType === CLIENT_HEART_BEAT_ACK {
+                        log:printDebug("Heart beat ack received from the client: " + message.id);
                     } else if message.operationType === USERSTORE_OPERATION_RESPONSE {
-                        log:printInfo("Remote response received from the client with id: " + message.id);
+                        log:printInfo("Remote response received with id: " + message.id);
 
                         RemoteResponse remoteResponse = {
                             id: message.id,
@@ -108,21 +120,26 @@ service "RemoteUserStore" on new grpc:Listener(9090) {
 // Send remote messages to the client.
 //
 // + caller         - Remote message caller.
-// + organization   - Organization.
+// + remoteData     - Remote client data.
 // + return - Error if there is an error in sending the remote messages.
-function sendRemoteMessages(RemoteUserStoreRemoteMessageCaller caller, string organization) returns error? {
-
-    io:println("Remote message sender started");
+function sendRemoteMessages(RemoteUserStoreRemoteMessageCaller caller, RemoteClientData remoteData) returns error? {
 
     time:Seconds heartBeatInterval = 10;
-    time:Utc? lastHeartBeatTime = null;
+
+    // Set the last heart beat time to the start time to avoid sending the initial heart beat.
+    time:Utc? lastHeartBeatTime = time:utcNow();
 
     while true {
-        RemoteJob? job = getRemoteJob(organization);
+        RemoteJob? job = null;
+        string organization = remoteData.organization;
+
+        if organization != "" {
+            job = getRemoteJob(organization);
+        }
 
         if job == null {
             // If no job are there, send heart beat messages to the cient to keep the stream alive.
-            if lastHeartBeatTime == null {
+            if lastHeartBeatTime is null {
                 serverHeartBeat(caller);
                 lastHeartBeatTime = time:utcNow();
             } else {

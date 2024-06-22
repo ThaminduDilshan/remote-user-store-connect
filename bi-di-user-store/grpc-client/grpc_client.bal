@@ -1,10 +1,13 @@
 import ballerina/log;
 
 // Server variables.
-string serverEndpoint = "http://localhost:9090";
-string client_id = "client_001";
+final string serverEndpoint = "http://localhost:9090";
+final string client_id = "client_001";
+final string organization = "test_org_1";
 
 public function main() returns error? {
+
+    log:printInfo("Starting the remote user store client...");
 
     RemoteUserStoreClient ep = check new (serverEndpoint);
     CommunicateStreamingClient streamingClient = check ep->communicate();
@@ -15,7 +18,8 @@ public function main() returns error? {
     // Send a client connection request to the server.
     RemoteMessage connectionRequest = {
         operationType: CLIENT_CONNECT,
-        id: client_id
+        id: client_id,
+        organization: organization
     };
     check streamingClient->sendRemoteMessage(connectionRequest);
 
@@ -32,13 +36,17 @@ function receiveRemoteRequests(CommunicateStreamingClient streamingClient) retur
     RemoteMessage? remoteMessage = check streamingClient->receiveRemoteMessage();
 
     while !(remoteMessage is ()) {
-        if remoteMessage.operationType === SERVER_HEART_BEAT {
-            log:printInfo("Received a server heart beat...");
+
+        if remoteMessage.operationType === SERVER_CONNECT {
+            log:printInfo("Connection successful with the server: " + remoteMessage.id);
+        } else if remoteMessage.operationType === SERVER_HEART_BEAT {
+            log:printDebug("Received a heart beat from the server: " + remoteMessage.id);
 
             // Send a heart beat ack to the server.
             // Note: This is required to keep the bi-directional stream alive in both directions.
             RemoteMessage heartBeatAck = {
-                operationType: SERVER_HEART_BEAT_ACK
+                operationType: CLIENT_HEART_BEAT_ACK,
+                id: client_id
             };
             check streamingClient->sendRemoteMessage(heartBeatAck);
         } else {

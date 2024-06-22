@@ -1,6 +1,6 @@
 [package]
 org = "thamindu"
-name = "remote_us_server"
+name = "userstore_server"
 version = "0.1.0"
 distribution = "2201.9.1"
 

@@ -26,3 +26,16 @@ type UserStoreError record {|
     string _error;
     string message;
 |};
+
+// Rest data types.
+type RemoteRestRequest record {|
+    string id;
+    string operationType;
+    map<anydata> data;
+|};
+
+type RemoteRESTResponse record {|
+    string id;
+    string operationType;
+    map<anydata> data;
+|};

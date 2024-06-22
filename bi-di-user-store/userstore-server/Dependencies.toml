@@ -274,7 +274,7 @@ modules = [
 
 [[package]]
 org = "thamindu"
-name = "remote_us_server"
+name = "userstore_server"
 version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "grpc"},
@@ -285,6 +285,6 @@ dependencies = [
 	{org = "ballerinai", name = "observe"}
 ]
 modules = [
-	{org = "thamindu", packageName = "remote_us_server", moduleName = "remote_us_server"}
+	{org = "thamindu", packageName = "userstore_server", moduleName = "userstore_server"}
 ]
 

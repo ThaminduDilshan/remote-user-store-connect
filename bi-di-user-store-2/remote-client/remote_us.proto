@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+service RemoteUserStore {
+	rpc communicate (stream RemoteMessage) returns (stream RemoteMessage);
+}
+
+message RemoteMessage {
+	string id = 1;
+    string operationType = 2;
+    string organization = 3;
+    google.protobuf.Struct data = 4;
+}

@@ -127,7 +127,7 @@ function sendRemoteMessages(RemoteUserStoreRemoteMessageCaller caller, RemoteCli
     time:Seconds heartBeatInterval = 10;
 
     // Set the last heart beat time to the start time to avoid sending the initial heart beat.
-    time:Utc? lastHeartBeatTime = time:utcNow();
+    time:Utc lastHeartBeatTime = time:utcNow();
 
     while true {
         RemoteJob? job = null;
@@ -139,17 +139,12 @@ function sendRemoteMessages(RemoteUserStoreRemoteMessageCaller caller, RemoteCli
 
         if job == null {
             // If no job are there, send heart beat messages to the cient to keep the stream alive.
-            if lastHeartBeatTime is null {
+            time:Utc currentTime = time:utcNow();
+            time:Seconds duration = time:utcDiffSeconds(currentTime, lastHeartBeatTime);
+
+            if duration > heartBeatInterval {
                 serverHeartBeat(caller);
                 lastHeartBeatTime = time:utcNow();
-            } else {
-                time:Utc currentTime = time:utcNow();
-                time:Seconds duration = time:utcDiffSeconds(currentTime, lastHeartBeatTime);
-
-                if duration > heartBeatInterval {
-                    serverHeartBeat(caller);
-                    lastHeartBeatTime = time:utcNow();
-                }
             }
         } else {
             log:printInfo("Remote job retrieve with id: " + job.id + " for the organization: " + organization);

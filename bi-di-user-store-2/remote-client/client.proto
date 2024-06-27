@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+service GRPCServer {
+    rpc communicate (stream RemoteMessage) returns (stream RemoteMessage);
+}
+
+message RemoteMessage {
+    string id = 1;
+    string streamId = 2;
+    string organization = 3;
+    string operationType = 4;
+    google.protobuf.Struct data = 5;
+}

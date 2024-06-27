@@ -1,65 +1,65 @@
 import ballerina/grpc;
 import ballerina/protobuf;
 
-public const string REMOTE_US_DESC = "0A0F72656D6F74655F75732E70726F746F1A1C676F6F676C652F70726F746F6275662F7374727563742E70726F746F2296010A0D52656D6F74654D657373616765120E0A0269641801200128095202696412240A0D6F7065726174696F6E54797065180220012809520D6F7065726174696F6E5479706512220A0C6F7267616E697A6174696F6E180320012809520C6F7267616E697A6174696F6E122B0A046461746118042001280B32172E676F6F676C652E70726F746F6275662E5374727563745204646174612289010A105573657253746F72655265717565737412240A0D6F7065726174696F6E54797065180120012809520D6F7065726174696F6E5479706512220A0C6F7267616E697A6174696F6E180220012809520C6F7267616E697A6174696F6E122B0A046461746118032001280B32172E676F6F676C652E70726F746F6275662E537472756374520464617461228A010A115573657253746F7265526573706F6E736512240A0D6F7065726174696F6E54797065180120012809520D6F7065726174696F6E5479706512220A0C6F7267616E697A6174696F6E180220012809520C6F7267616E697A6174696F6E122B0A046461746118032001280B32172E676F6F676C652E70726F746F6275662E53747275637452046461746132440A0F52656D6F74655573657253746F726512310A0B636F6D6D756E6963617465120E2E52656D6F74654D6573736167651A0E2E52656D6F74654D6573736167652801300132480A0C52656D6F746553657276657212380A0F696E766F6B655573657253746F726512112E5573657253746F7265526571756573741A122E5573657253746F7265526573706F6E7365620670726F746F33";
+public const string SERVER_DESC = "0A0C7365727665722E70726F746F1A1C676F6F676C652F70726F746F6275662F7374727563742E70726F746F22B2010A0D52656D6F74654D657373616765120E0A02696418012001280952026964121A0A0873747265616D4964180220012809520873747265616D496412220A0C6F7267616E697A6174696F6E180320012809520C6F7267616E697A6174696F6E12240A0D6F7065726174696F6E54797065180420012809520D6F7065726174696F6E54797065122B0A046461746118052001280B32172E676F6F676C652E70726F746F6275662E53747275637452046461746122730A1541757468656E7469636174696F6E52657175657374121A0A08757365726E616D651801200128095208757365726E616D65121A0A0870617373776F7264180220012809520870617373776F726412220A0C6F7267616E697A6174696F6E180320012809520C6F7267616E697A6174696F6E22610A1641757468656E7469636174696F6E526573706F6E7365121A0A08757365726E616D651801200128095208757365726E616D65122B0A046461746118022001280B32172E676F6F676C652E70726F746F6275662E537472756374520464617461323F0A0A4752504353657276657212310A0B636F6D6D756E6963617465120E2E52656D6F74654D6573736167651A0E2E52656D6F74654D6573736167652801300132520A0F5573657253746F7265536572766572123F0A0C61757468656E74696361746512162E41757468656E7469636174696F6E526571756573741A172E41757468656E7469636174696F6E526573706F6E7365620670726F746F33";
 
-public isolated client class RemoteUserStoreClient {
+public isolated client class GRPCServerClient {
     *grpc:AbstractClientEndpoint;
 
     private final grpc:Client grpcClient;
 
     public isolated function init(string url, *grpc:ClientConfiguration config) returns grpc:Error? {
         self.grpcClient = check new (url, config);
-        check self.grpcClient.initStub(self, REMOTE_US_DESC);
+        check self.grpcClient.initStub(self, SERVER_DESC);
     }
 
     isolated remote function communicate() returns CommunicateStreamingClient|grpc:Error {
-        grpc:StreamingClient sClient = check self.grpcClient->executeBidirectionalStreaming("RemoteUserStore/communicate");
+        grpc:StreamingClient sClient = check self.grpcClient->executeBidirectionalStreaming("GRPCServer/communicate");
         return new CommunicateStreamingClient(sClient);
     }
 }
 
-public isolated client class RemoteServerClient {
+public isolated client class UserStoreServerClient {
     *grpc:AbstractClientEndpoint;
 
     private final grpc:Client grpcClient;
 
     public isolated function init(string url, *grpc:ClientConfiguration config) returns grpc:Error? {
         self.grpcClient = check new (url, config);
-        check self.grpcClient.initStub(self, REMOTE_US_DESC);
+        check self.grpcClient.initStub(self, SERVER_DESC);
     }
 
-    isolated remote function invokeUserStore(UserStoreRequest|ContextUserStoreRequest req) returns UserStoreResponse|grpc:Error {
+    isolated remote function authenticate(AuthenticationRequest|ContextAuthenticationRequest req) returns AuthenticationResponse|grpc:Error {
         map<string|string[]> headers = {};
-        UserStoreRequest message;
-        if req is ContextUserStoreRequest {
+        AuthenticationRequest message;
+        if req is ContextAuthenticationRequest {
             message = req.content;
             headers = req.headers;
         } else {
             message = req;
         }
-        var payload = check self.grpcClient->executeSimpleRPC("RemoteServer/invokeUserStore", message, headers);
+        var payload = check self.grpcClient->executeSimpleRPC("UserStoreServer/authenticate", message, headers);
         [anydata, map<string|string[]>] [result, _] = payload;
-        return <UserStoreResponse>result;
+        return <AuthenticationResponse>result;
     }
 
-    isolated remote function invokeUserStoreContext(UserStoreRequest|ContextUserStoreRequest req) returns ContextUserStoreResponse|grpc:Error {
+    isolated remote function authenticateContext(AuthenticationRequest|ContextAuthenticationRequest req) returns ContextAuthenticationResponse|grpc:Error {
         map<string|string[]> headers = {};
-        UserStoreRequest message;
-        if req is ContextUserStoreRequest {
+        AuthenticationRequest message;
+        if req is ContextAuthenticationRequest {
             message = req.content;
             headers = req.headers;
         } else {
             message = req;
         }
-        var payload = check self.grpcClient->executeSimpleRPC("RemoteServer/invokeUserStore", message, headers);
+        var payload = check self.grpcClient->executeSimpleRPC("UserStoreServer/authenticate", message, headers);
         [anydata, map<string|string[]>] [result, respHeaders] = payload;
-        return {content: <UserStoreResponse>result, headers: respHeaders};
+        return {content: <AuthenticationResponse>result, headers: respHeaders};
     }
 }
 
-public client class CommunicateStreamingClient {
-    private grpc:StreamingClient sClient;
+public isolated client class CommunicateStreamingClient {
+    private final grpc:StreamingClient sClient;
 
     isolated function init(grpc:StreamingClient sClient) {
         self.sClient = sClient;
@@ -102,8 +102,8 @@ public client class CommunicateStreamingClient {
     }
 }
 
-public client class RemoteUserStoreRemoteMessageCaller {
-    private grpc:Caller caller;
+public isolated client class GRPCServerRemoteMessageCaller {
+    private final grpc:Caller caller;
 
     public isolated function init(grpc:Caller caller) {
         self.caller = caller;
@@ -134,7 +134,7 @@ public client class RemoteUserStoreRemoteMessageCaller {
     }
 }
 
-public client class RemoteServerUserStoreResponseCaller {
+public client class UserStoreServerAuthenticationResponseCaller {
     private grpc:Caller caller;
 
     public isolated function init(grpc:Caller caller) {
@@ -145,11 +145,11 @@ public client class RemoteServerUserStoreResponseCaller {
         return self.caller.getId();
     }
 
-    isolated remote function sendUserStoreResponse(UserStoreResponse response) returns grpc:Error? {
+    isolated remote function sendAuthenticationResponse(AuthenticationResponse response) returns grpc:Error? {
         return self.caller->send(response);
     }
 
-    isolated remote function sendContextUserStoreResponse(ContextUserStoreResponse response) returns grpc:Error? {
+    isolated remote function sendContextAuthenticationResponse(ContextAuthenticationResponse response) returns grpc:Error? {
         return self.caller->send(response);
     }
 
@@ -176,35 +176,35 @@ public type ContextRemoteMessage record {|
     map<string|string[]> headers;
 |};
 
-public type ContextUserStoreRequest record {|
-    UserStoreRequest content;
+public type ContextAuthenticationRequest record {|
+    AuthenticationRequest content;
     map<string|string[]> headers;
 |};
 
-public type ContextUserStoreResponse record {|
-    UserStoreResponse content;
+public type ContextAuthenticationResponse record {|
+    AuthenticationResponse content;
     map<string|string[]> headers;
 |};
 
-@protobuf:Descriptor {value: REMOTE_US_DESC}
+@protobuf:Descriptor {value: SERVER_DESC}
 public type RemoteMessage record {|
     string id = "";
-    string operationType = "";
+    string streamId = "";
     string organization = "";
+    string operationType = "";
     map<anydata> data = {};
 |};
 
-@protobuf:Descriptor {value: REMOTE_US_DESC}
-public type UserStoreRequest record {|
-    string operationType = "";
+@protobuf:Descriptor {value: SERVER_DESC}
+public type AuthenticationRequest record {|
+    string username = "";
+    string password = "";
     string organization = "";
-    map<anydata> data = {};
 |};
 
-@protobuf:Descriptor {value: REMOTE_US_DESC}
-public type UserStoreResponse record {|
-    string operationType = "";
-    string organization = "";
+@protobuf:Descriptor {value: SERVER_DESC}
+public type AuthenticationResponse record {|
+    string username = "";
     map<anydata> data = {};
 |};
 

@@ -50,7 +50,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "grpc"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
 	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "crypto"},

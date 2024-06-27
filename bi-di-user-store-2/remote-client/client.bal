@@ -6,37 +6,43 @@ final string serverEndpoint = "http://localhost:9090";
 // Client variables.
 final string client_id = "client_001";
 final string organization = "test_org_1";
-
-configurable string clientMode = "PRIVATE";
+final int noOfStreams = 2;
 
 public function main() returns error? {
     
     log:printInfo("Starting the remote user store client...");
 
-    // Starting the client in private mode. I.e. a GRPC client.
-    log:printInfo("Client mode is set to: PRIVATE");
+    GRPCServerClient ep = check new (serverEndpoint);
 
-    RemoteUserStoreClient ep = check new (serverEndpoint);
+    // TODO: Need to do this in a loop to create multiple streams.
+    // int i = 0;
+    // while i < noOfStreams {
+    //     log:printDebug("Creating a new stream with id: " + i.toString() + "...");
+    //     i += 1;
+    // }
+    
+    int streamId = 1;
     CommunicateStreamingClient streamingClient = check ep->communicate();
 
     // Start receiving remote requests in another strand.
-    future<error?> f1 = start handleReceiveRemoteRequests(streamingClient);
+    future<error?> f1 = start receiveServerRequests(streamingClient);
 
     // Send a client connection request to the server.
     RemoteMessage connectionRequest = {
-        operationType: "CLIENT_CONNECT",
         id: client_id,
+        streamId: streamId.toString(),
         organization: organization,
+        operationType: "CLIENT_CONNECT",
         data: {}
     };       
     check streamingClient->sendRemoteMessage(connectionRequest);
 
-    // Wait for the handleReceiveRemoteRequests function to complete.
+    // Wait for the receiveServerRequests function to complete.
     check wait f1;
 }
 
 // Function to keep receiving remote requests from the server.
-function handleReceiveRemoteRequests(CommunicateStreamingClient streamingClient) returns error? {
+function receiveServerRequests(CommunicateStreamingClient streamingClient) returns error? {
 
     RemoteMessage? remoteMessage = check streamingClient->receiveRemoteMessage();
 
@@ -45,9 +51,9 @@ function handleReceiveRemoteRequests(CommunicateStreamingClient streamingClient)
             + " for the operation type: " + remoteMessage.operationType);
 
         // Process the received message.
-        error? processResult = handleProcessUserStoreRequest(streamingClient, remoteMessage);
+        error? result = handleUserStoreRequest(streamingClient, remoteMessage);
 
-        if processResult is error {
+        if result is error {
             log:printError("Error occurred while processing the remote message with id: " + remoteMessage.id);
         }
 
@@ -56,7 +62,7 @@ function handleReceiveRemoteRequests(CommunicateStreamingClient streamingClient)
 }
 
 // Function to process the user store request.
-function handleProcessUserStoreRequest(CommunicateStreamingClient streamingClient, RemoteMessage remoteMessage) 
+function handleUserStoreRequest(CommunicateStreamingClient streamingClient, RemoteMessage remoteMessage) 
         returns error? {
 
     string id = remoteMessage.id;
@@ -75,8 +81,9 @@ function handleProcessUserStoreRequest(CommunicateStreamingClient streamingClien
                 
                 RemoteMessage responseMessage = {
                     id: id,
-                    operationType: "USERSTORE_OPERATION_RESPONSE",
+                    streamId: remoteMessage.streamId,
                     organization: remoteMessage.organization,
+                    operationType: "USERSTORE_OPERATION_RESPONSE",
                     data: usError
                 };
                 check streamingClient->sendRemoteMessage(responseMessage);
@@ -95,8 +102,9 @@ function handleProcessUserStoreRequest(CommunicateStreamingClient streamingClien
                     
                     RemoteMessage responseMessage = {
                         id: id,
-                        operationType: "USERSTORE_OPERATION_RESPONSE",
+                        streamId: remoteMessage.streamId,
                         organization: remoteMessage.organization,
+                        operationType: USERSTORE_OPERATION_RESPONSE,
                         data: usError
                     };
                     check streamingClient->sendRemoteMessage(responseMessage);
@@ -115,8 +123,9 @@ function handleProcessUserStoreRequest(CommunicateStreamingClient streamingClien
 
                 RemoteMessage responseMessage = {
                     id: id,
-                    operationType: "USERSTORE_OPERATION_RESPONSE",
+                    streamId: remoteMessage.streamId,
                     organization: remoteMessage.organization,
+                    operationType: USERSTORE_OPERATION_RESPONSE,
                     data: authResponse
                 };
                 check streamingClient->sendRemoteMessage(responseMessage);
@@ -132,8 +141,9 @@ function handleProcessUserStoreRequest(CommunicateStreamingClient streamingClien
             
             RemoteMessage responseMessage = {
                 id: id,
-                operationType: "USERSTORE_OPERATION_RESPONSE",
+                streamId: remoteMessage.streamId,
                 organization: remoteMessage.organization,
+                operationType: USERSTORE_OPERATION_RESPONSE,
                 data: usError
             };
             check streamingClient->sendRemoteMessage(responseMessage);

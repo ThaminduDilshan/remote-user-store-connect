@@ -1,20 +1,20 @@
 import ballerina/grpc;
 import ballerina/protobuf;
 
-public const string REMOTE_US_DESC = "0A0F72656D6F74655F75732E70726F746F1A1C676F6F676C652F70726F746F6275662F7374727563742E70726F746F2296010A0D52656D6F74654D657373616765120E0A0269641801200128095202696412240A0D6F7065726174696F6E54797065180220012809520D6F7065726174696F6E5479706512220A0C6F7267616E697A6174696F6E180320012809520C6F7267616E697A6174696F6E122B0A046461746118042001280B32172E676F6F676C652E70726F746F6275662E53747275637452046461746132440A0F52656D6F74655573657253746F726512310A0B636F6D6D756E6963617465120E2E52656D6F74654D6573736167651A0E2E52656D6F74654D65737361676528013001620670726F746F33";
+public const string CLIENT_DESC = "0A0C636C69656E742E70726F746F1A1C676F6F676C652F70726F746F6275662F7374727563742E70726F746F22B2010A0D52656D6F74654D657373616765120E0A02696418012001280952026964121A0A0873747265616D4964180220012809520873747265616D496412220A0C6F7267616E697A6174696F6E180320012809520C6F7267616E697A6174696F6E12240A0D6F7065726174696F6E54797065180420012809520D6F7065726174696F6E54797065122B0A046461746118052001280B32172E676F6F676C652E70726F746F6275662E537472756374520464617461323F0A0A4752504353657276657212310A0B636F6D6D756E6963617465120E2E52656D6F74654D6573736167651A0E2E52656D6F74654D65737361676528013001620670726F746F33";
 
-public isolated client class RemoteUserStoreClient {
+public isolated client class GRPCServerClient {
     *grpc:AbstractClientEndpoint;
 
     private final grpc:Client grpcClient;
 
     public isolated function init(string url, *grpc:ClientConfiguration config) returns grpc:Error? {
         self.grpcClient = check new (url, config);
-        check self.grpcClient.initStub(self, REMOTE_US_DESC);
+        check self.grpcClient.initStub(self, CLIENT_DESC);
     }
 
     isolated remote function communicate() returns CommunicateStreamingClient|grpc:Error {
-        grpc:StreamingClient sClient = check self.grpcClient->executeBidirectionalStreaming("RemoteUserStore/communicate");
+        grpc:StreamingClient sClient = check self.grpcClient->executeBidirectionalStreaming("GRPCServer/communicate");
         return new CommunicateStreamingClient(sClient);
     }
 }
@@ -63,7 +63,7 @@ public client class CommunicateStreamingClient {
     }
 }
 
-public client class RemoteUserStoreRemoteMessageCaller {
+public client class GRPCServerRemoteMessageCaller {
     private grpc:Caller caller;
 
     public isolated function init(grpc:Caller caller) {
@@ -105,11 +105,12 @@ public type ContextRemoteMessage record {|
     map<string|string[]> headers;
 |};
 
-@protobuf:Descriptor {value: REMOTE_US_DESC}
+@protobuf:Descriptor {value: CLIENT_DESC}
 public type RemoteMessage record {|
     string id = "";
-    string operationType = "";
+    string streamId = "";
     string organization = "";
+    string operationType = "";
     map<anydata> data = {};
 |};
 

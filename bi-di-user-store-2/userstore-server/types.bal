@@ -1,16 +1,12 @@
-type RemoteJob record {|
-    string id;
-    string operationType;
-    string organization;
-    map<anydata> data;
-|};
-
-type RemoteResponse record {|
-    string id;
-    map<anydata> data;
-|};
-
 type RemoteClientData record {|
-    string id;
+    string clientId;
     string organization;
+    map<RemoteClientStreamData> streams;
+|};
+
+type RemoteClientStreamData record {|
+    string clientId;
+    string streamId;
+    GRPCServerRemoteMessageCaller caller;
+    stream<RemoteMessage, error?> clientStream;
 |};

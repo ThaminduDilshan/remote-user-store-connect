@@ -50,7 +50,7 @@ dependencies = [
 [[package]]
 org = "ballerina"
 name = "grpc"
-version = "1.11.0"
+version = "1.11.1"
 dependencies = [
 	{org = "ballerina", name = "auth"},
 	{org = "ballerina", name = "crypto"},
@@ -257,7 +257,7 @@ modules = [
 
 [[package]]
 org = "thamindu"
-name = "remote_client"
+name = "remote_agent"
 version = "0.1.0"
 dependencies = [
 	{org = "ballerina", name = "grpc"},
@@ -266,6 +266,6 @@ dependencies = [
 	{org = "ballerinai", name = "observe"}
 ]
 modules = [
-	{org = "thamindu", packageName = "remote_client", moduleName = "remote_client"}
+	{org = "thamindu", packageName = "remote_agent", moduleName = "remote_agent"}
 ]
 

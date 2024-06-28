@@ -1,6 +1,6 @@
 # GRPC Bi-Directional Remote User Store Sample
 
-This project contains a GRPC user store server, a GRPC remote client and a sample user store manager.
+This project contains a GRPC user store server, a GRPC remote agent and a sample user store manager.
 
 For the demonstration purposes, the project only supports user authentication against a set of locally stored user credentials.
 
@@ -20,7 +20,7 @@ The GRPC server exposes a GRPC endpoint to connect from third party applications
    bal run
    ```
    
-2. navigate to the `remote-client` directory and run the following command:
+2. navigate to the `remote-agent` directory and run the following command:
 
    ```bash
    bal run
@@ -38,6 +38,12 @@ The GRPC server exposes a GRPC endpoint to connect from third party applications
          "organization": "test_org_1"
      }
      ```
+
+   Alternatively you can run the `userstore-manager` sample to perform a user authentication. Navigate to the `userstore-manager` directory and run the following command:
+   
+      ```bash
+      bal run
+      ```
 
 ## Troubleshooting
 

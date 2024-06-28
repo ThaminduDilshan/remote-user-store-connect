@@ -1,6 +1,6 @@
 [package]
 org = "thamindu"
-name = "remote_client"
+name = "remote_agent"
 version = "0.1.0"
 distribution = "2201.9.1"
 

@@ -10,7 +10,7 @@ The client should be kept private in a local environment and should only allow o
 
 The GRPC server exposes a GRPC endpoint to connect from third party applications such as the provided user store manager sample.
 
-![Architecture diagram](resources/bidi-grpc-architecture.png)
+![Architecture diagram](resources/architecture-diagram.png)
 
 ### How to run
 

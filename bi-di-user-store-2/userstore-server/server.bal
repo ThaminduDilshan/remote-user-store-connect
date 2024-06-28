@@ -121,7 +121,7 @@ service "GRPCServer" on new grpc:Listener(9090) {
 @grpc:Descriptor {
     value: SERVER_DESC
 }
-service "RemoteServer" on new grpc:Listener(9092) {
+service "UserStoreServer" on new grpc:Listener(9092) {
 
     remote isolated function authenticate(AuthenticationRequest authRequest) returns AuthenticationResponse {
 

@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+import "google/protobuf/struct.proto";
+
+service GRPCServer {
+    rpc communicate (stream RemoteMessage) returns (stream RemoteMessage);
+}
+
+service UserStoreServer {
+    rpc authenticate (AuthenticationRequest) returns (AuthenticationResponse);
+}
+
+message RemoteMessage {
+    string id = 1;
+    string streamId = 2;
+    string organization = 3;
+    string operationType = 4;
+    google.protobuf.Struct data = 5;
+}
+
+message AuthenticationRequest {
+    string username = 1;
+    string password = 2;
+    string organization = 3;
+}
+
+message AuthenticationResponse {
+    string username = 1;
+    google.protobuf.Struct data = 2;
+}

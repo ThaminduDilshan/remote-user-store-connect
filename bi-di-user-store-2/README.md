@@ -19,30 +19,23 @@ The GRPC server exposes a GRPC endpoint to connect from third party applications
    ```bash
    bal run
    ```
+   
 2. navigate to the `remote-client` directory and run the following command:
 
    ```bash
    bal run
    ```
+
 3. Invoke the server with the following grpc command to authenticate a user:
 
    - Endpoint: grpc://localhost:9092
-   - Method: RemoteServer/invokeUserStore
+   - Method: UserStoreServer/authenticate
    - Payload:
      ```json
      {
-         "organization": "test_org_1",
-         "operationType": "DO_AUTHENTICATE",
-         "data": {
-             "fields": {
-                 "username": {
-                     "string_value": "user1"
-                 },
-                 "password": {
-                     "string_value": "user1"
-                 }
-             }
-         }
+         "username": "user1",
+         "password": "user1",
+         "organization": "test_org_1"
      }
      ```
 

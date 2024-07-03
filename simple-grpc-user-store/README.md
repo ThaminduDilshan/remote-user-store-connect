@@ -1,4 +1,4 @@
-# Simple GRPC Remote User Store Sample
+# Simple GRPC Remote User Store Sample (Ballerina)
 
 This project contains a simple gRPC server and a client application that communicates with an on premise user store to perform user operations such as authentication.
 

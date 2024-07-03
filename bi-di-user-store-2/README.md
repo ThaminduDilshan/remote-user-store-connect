@@ -1,4 +1,4 @@
-# GRPC Bi-Directional Remote User Store Sample
+# GRPC Bi-Directional Remote User Store Sample (Ballerina)
 
 This project contains a GRPC user store server, a GRPC remote agent and a sample user store manager.
 

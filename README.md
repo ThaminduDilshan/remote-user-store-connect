@@ -5,3 +5,4 @@ This repository contains two sample applications to connect a locally running re
 1. [Simple GRPC User Store](/simple-grpc-user-store/)
 2. [Bi-Directional User Store (Job and Result Pool Method)](/bi-di-user-store/)
 3. [Bi-Directional User Store (Caller and Stream Pool Method)](/bi-di-user-store-2/)
+4. [Bi-Directional User Store (Caller and Stream Pool Method) - Go Lang](/bi-di-user-store-3/)

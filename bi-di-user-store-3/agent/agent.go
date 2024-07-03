@@ -17,6 +17,7 @@ import (
 const (
 	intermediateServerAddress = "localhost:9004"
 	organization              = "test_org_1"
+	noOfAgentConnections      = 5
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 	log.Println("Starting Local Agent...")
 	var wg sync.WaitGroup
 
-	for i := 0; i < 5; i++ { // Start 5 connections for load handling
+	for i := 0; i < noOfAgentConnections; i++ { // Start 5 connections for load handling
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()

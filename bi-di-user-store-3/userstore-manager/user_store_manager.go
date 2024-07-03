@@ -17,7 +17,7 @@ import (
 
 const (
 	intermediateServerAddress = "localhost:9004"
-	numRequests               = 10 // Number of concurrent requests
+	numRequests               = 50 // Number of concurrent requests
 	maxRetries                = 3
 	initialBackoff            = 100 * time.Millisecond
 	maxBackoff                = 2 * time.Second

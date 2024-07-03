@@ -19,49 +19,49 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	RemoteUserStore_Communicate_FullMethodName = "/RemoteUserStore/communicate"
+	UserStoreHubService_Communicate_FullMethodName = "/UserStoreHubService/communicate"
 )
 
-// RemoteUserStoreClient is the client API for RemoteUserStore service.
+// UserStoreHubServiceClient is the client API for UserStoreHubService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type RemoteUserStoreClient interface {
-	Communicate(ctx context.Context, opts ...grpc.CallOption) (RemoteUserStore_CommunicateClient, error)
+type UserStoreHubServiceClient interface {
+	Communicate(ctx context.Context, opts ...grpc.CallOption) (UserStoreHubService_CommunicateClient, error)
 }
 
-type remoteUserStoreClient struct {
+type userStoreHubServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewRemoteUserStoreClient(cc grpc.ClientConnInterface) RemoteUserStoreClient {
-	return &remoteUserStoreClient{cc}
+func NewUserStoreHubServiceClient(cc grpc.ClientConnInterface) UserStoreHubServiceClient {
+	return &userStoreHubServiceClient{cc}
 }
 
-func (c *remoteUserStoreClient) Communicate(ctx context.Context, opts ...grpc.CallOption) (RemoteUserStore_CommunicateClient, error) {
+func (c *userStoreHubServiceClient) Communicate(ctx context.Context, opts ...grpc.CallOption) (UserStoreHubService_CommunicateClient, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &RemoteUserStore_ServiceDesc.Streams[0], RemoteUserStore_Communicate_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &UserStoreHubService_ServiceDesc.Streams[0], UserStoreHubService_Communicate_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &remoteUserStoreCommunicateClient{ClientStream: stream}
+	x := &userStoreHubServiceCommunicateClient{ClientStream: stream}
 	return x, nil
 }
 
-type RemoteUserStore_CommunicateClient interface {
+type UserStoreHubService_CommunicateClient interface {
 	Send(*RemoteMessage) error
 	Recv() (*RemoteMessage, error)
 	grpc.ClientStream
 }
 
-type remoteUserStoreCommunicateClient struct {
+type userStoreHubServiceCommunicateClient struct {
 	grpc.ClientStream
 }
 
-func (x *remoteUserStoreCommunicateClient) Send(m *RemoteMessage) error {
+func (x *userStoreHubServiceCommunicateClient) Send(m *RemoteMessage) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *remoteUserStoreCommunicateClient) Recv() (*RemoteMessage, error) {
+func (x *userStoreHubServiceCommunicateClient) Recv() (*RemoteMessage, error) {
 	m := new(RemoteMessage)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -69,53 +69,53 @@ func (x *remoteUserStoreCommunicateClient) Recv() (*RemoteMessage, error) {
 	return m, nil
 }
 
-// RemoteUserStoreServer is the server API for RemoteUserStore service.
-// All implementations must embed UnimplementedRemoteUserStoreServer
+// UserStoreHubServiceServer is the server API for UserStoreHubService service.
+// All implementations must embed UnimplementedUserStoreHubServiceServer
 // for forward compatibility
-type RemoteUserStoreServer interface {
-	Communicate(RemoteUserStore_CommunicateServer) error
-	mustEmbedUnimplementedRemoteUserStoreServer()
+type UserStoreHubServiceServer interface {
+	Communicate(UserStoreHubService_CommunicateServer) error
+	mustEmbedUnimplementedUserStoreHubServiceServer()
 }
 
-// UnimplementedRemoteUserStoreServer must be embedded to have forward compatible implementations.
-type UnimplementedRemoteUserStoreServer struct {
+// UnimplementedUserStoreHubServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedUserStoreHubServiceServer struct {
 }
 
-func (UnimplementedRemoteUserStoreServer) Communicate(RemoteUserStore_CommunicateServer) error {
+func (UnimplementedUserStoreHubServiceServer) Communicate(UserStoreHubService_CommunicateServer) error {
 	return status.Errorf(codes.Unimplemented, "method Communicate not implemented")
 }
-func (UnimplementedRemoteUserStoreServer) mustEmbedUnimplementedRemoteUserStoreServer() {}
+func (UnimplementedUserStoreHubServiceServer) mustEmbedUnimplementedUserStoreHubServiceServer() {}
 
-// UnsafeRemoteUserStoreServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to RemoteUserStoreServer will
+// UnsafeUserStoreHubServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to UserStoreHubServiceServer will
 // result in compilation errors.
-type UnsafeRemoteUserStoreServer interface {
-	mustEmbedUnimplementedRemoteUserStoreServer()
+type UnsafeUserStoreHubServiceServer interface {
+	mustEmbedUnimplementedUserStoreHubServiceServer()
 }
 
-func RegisterRemoteUserStoreServer(s grpc.ServiceRegistrar, srv RemoteUserStoreServer) {
-	s.RegisterService(&RemoteUserStore_ServiceDesc, srv)
+func RegisterUserStoreHubServiceServer(s grpc.ServiceRegistrar, srv UserStoreHubServiceServer) {
+	s.RegisterService(&UserStoreHubService_ServiceDesc, srv)
 }
 
-func _RemoteUserStore_Communicate_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(RemoteUserStoreServer).Communicate(&remoteUserStoreCommunicateServer{ServerStream: stream})
+func _UserStoreHubService_Communicate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(UserStoreHubServiceServer).Communicate(&userStoreHubServiceCommunicateServer{ServerStream: stream})
 }
 
-type RemoteUserStore_CommunicateServer interface {
+type UserStoreHubService_CommunicateServer interface {
 	Send(*RemoteMessage) error
 	Recv() (*RemoteMessage, error)
 	grpc.ServerStream
 }
 
-type remoteUserStoreCommunicateServer struct {
+type userStoreHubServiceCommunicateServer struct {
 	grpc.ServerStream
 }
 
-func (x *remoteUserStoreCommunicateServer) Send(m *RemoteMessage) error {
+func (x *userStoreHubServiceCommunicateServer) Send(m *RemoteMessage) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *remoteUserStoreCommunicateServer) Recv() (*RemoteMessage, error) {
+func (x *userStoreHubServiceCommunicateServer) Recv() (*RemoteMessage, error) {
 	m := new(RemoteMessage)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -123,17 +123,17 @@ func (x *remoteUserStoreCommunicateServer) Recv() (*RemoteMessage, error) {
 	return m, nil
 }
 
-// RemoteUserStore_ServiceDesc is the grpc.ServiceDesc for RemoteUserStore service.
+// UserStoreHubService_ServiceDesc is the grpc.ServiceDesc for UserStoreHubService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var RemoteUserStore_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "RemoteUserStore",
-	HandlerType: (*RemoteUserStoreServer)(nil),
+var UserStoreHubService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "UserStoreHubService",
+	HandlerType: (*UserStoreHubServiceServer)(nil),
 	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "communicate",
-			Handler:       _RemoteUserStore_Communicate_Handler,
+			Handler:       _UserStoreHubService_Communicate_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
@@ -142,90 +142,91 @@ var RemoteUserStore_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	RemoteServer_InvokeUserStore_FullMethodName = "/RemoteServer/invokeUserStore"
+	RemoteUserStoreService_InvokeUserStore_FullMethodName = "/RemoteUserStoreService/invokeUserStore"
 )
 
-// RemoteServerClient is the client API for RemoteServer service.
+// RemoteUserStoreServiceClient is the client API for RemoteUserStoreService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type RemoteServerClient interface {
+type RemoteUserStoreServiceClient interface {
 	InvokeUserStore(ctx context.Context, in *UserStoreRequest, opts ...grpc.CallOption) (*UserStoreResponse, error)
 }
 
-type remoteServerClient struct {
+type remoteUserStoreServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewRemoteServerClient(cc grpc.ClientConnInterface) RemoteServerClient {
-	return &remoteServerClient{cc}
+func NewRemoteUserStoreServiceClient(cc grpc.ClientConnInterface) RemoteUserStoreServiceClient {
+	return &remoteUserStoreServiceClient{cc}
 }
 
-func (c *remoteServerClient) InvokeUserStore(ctx context.Context, in *UserStoreRequest, opts ...grpc.CallOption) (*UserStoreResponse, error) {
+func (c *remoteUserStoreServiceClient) InvokeUserStore(ctx context.Context, in *UserStoreRequest, opts ...grpc.CallOption) (*UserStoreResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UserStoreResponse)
-	err := c.cc.Invoke(ctx, RemoteServer_InvokeUserStore_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, RemoteUserStoreService_InvokeUserStore_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// RemoteServerServer is the server API for RemoteServer service.
-// All implementations must embed UnimplementedRemoteServerServer
+// RemoteUserStoreServiceServer is the server API for RemoteUserStoreService service.
+// All implementations must embed UnimplementedRemoteUserStoreServiceServer
 // for forward compatibility
-type RemoteServerServer interface {
+type RemoteUserStoreServiceServer interface {
 	InvokeUserStore(context.Context, *UserStoreRequest) (*UserStoreResponse, error)
-	mustEmbedUnimplementedRemoteServerServer()
+	mustEmbedUnimplementedRemoteUserStoreServiceServer()
 }
 
-// UnimplementedRemoteServerServer must be embedded to have forward compatible implementations.
-type UnimplementedRemoteServerServer struct {
+// UnimplementedRemoteUserStoreServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedRemoteUserStoreServiceServer struct {
 }
 
-func (UnimplementedRemoteServerServer) InvokeUserStore(context.Context, *UserStoreRequest) (*UserStoreResponse, error) {
+func (UnimplementedRemoteUserStoreServiceServer) InvokeUserStore(context.Context, *UserStoreRequest) (*UserStoreResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeUserStore not implemented")
 }
-func (UnimplementedRemoteServerServer) mustEmbedUnimplementedRemoteServerServer() {}
+func (UnimplementedRemoteUserStoreServiceServer) mustEmbedUnimplementedRemoteUserStoreServiceServer() {
+}
 
-// UnsafeRemoteServerServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to RemoteServerServer will
+// UnsafeRemoteUserStoreServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to RemoteUserStoreServiceServer will
 // result in compilation errors.
-type UnsafeRemoteServerServer interface {
-	mustEmbedUnimplementedRemoteServerServer()
+type UnsafeRemoteUserStoreServiceServer interface {
+	mustEmbedUnimplementedRemoteUserStoreServiceServer()
 }
 
-func RegisterRemoteServerServer(s grpc.ServiceRegistrar, srv RemoteServerServer) {
-	s.RegisterService(&RemoteServer_ServiceDesc, srv)
+func RegisterRemoteUserStoreServiceServer(s grpc.ServiceRegistrar, srv RemoteUserStoreServiceServer) {
+	s.RegisterService(&RemoteUserStoreService_ServiceDesc, srv)
 }
 
-func _RemoteServer_InvokeUserStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _RemoteUserStoreService_InvokeUserStore_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UserStoreRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(RemoteServerServer).InvokeUserStore(ctx, in)
+		return srv.(RemoteUserStoreServiceServer).InvokeUserStore(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: RemoteServer_InvokeUserStore_FullMethodName,
+		FullMethod: RemoteUserStoreService_InvokeUserStore_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(RemoteServerServer).InvokeUserStore(ctx, req.(*UserStoreRequest))
+		return srv.(RemoteUserStoreServiceServer).InvokeUserStore(ctx, req.(*UserStoreRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// RemoteServer_ServiceDesc is the grpc.ServiceDesc for RemoteServer service.
+// RemoteUserStoreService_ServiceDesc is the grpc.ServiceDesc for RemoteUserStoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var RemoteServer_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "RemoteServer",
-	HandlerType: (*RemoteServerServer)(nil),
+var RemoteUserStoreService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "RemoteUserStoreService",
+	HandlerType: (*RemoteUserStoreServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "invokeUserStore",
-			Handler:    _RemoteServer_InvokeUserStore_Handler,
+			Handler:    _RemoteUserStoreService_InvokeUserStore_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

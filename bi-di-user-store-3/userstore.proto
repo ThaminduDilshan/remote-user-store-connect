@@ -4,15 +4,18 @@ import "google/protobuf/struct.proto";
 
 option go_package = "/proto";
 
-service RemoteUserStore {
+service UserStoreHubService {
+
     rpc communicate (stream RemoteMessage) returns (stream RemoteMessage);
 }
 
-service RemoteServer {
+service RemoteUserStoreService {
+
     rpc invokeUserStore (UserStoreRequest) returns (UserStoreResponse);
 }
 
 message RemoteMessage {
+
     string id = 1;
     string operationType = 2;
     string organization = 3;
@@ -20,13 +23,17 @@ message RemoteMessage {
 }
 
 message UserStoreRequest {
-    string operationType = 1;
-    string organization = 2;
-    google.protobuf.Struct data = 3;
+
+    string id = 1;
+    string operationType = 2;
+    string organization = 3;
+    google.protobuf.Struct data = 4;
 }
 
 message UserStoreResponse {
-    string operationType = 1;
-    string organization = 2;
-    google.protobuf.Struct data = 3;
+
+    string id = 1;
+    string operationType = 2;
+    string organization = 3;
+    google.protobuf.Struct data = 4;
 }

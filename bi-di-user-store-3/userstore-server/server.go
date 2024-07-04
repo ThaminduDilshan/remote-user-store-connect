@@ -10,7 +10,6 @@ import (
 
 	pb "bi-di-user-store-3/proto"
 
-	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -22,7 +21,7 @@ const (
 )
 
 type agentConnection struct {
-	stream pb.RemoteUserStore_CommunicateServer
+	stream pb.UserStoreHubService_CommunicateServer
 	inUse  bool
 }
 
@@ -34,8 +33,8 @@ type organizationConnection struct {
 }
 
 type server struct {
-	pb.UnimplementedRemoteServerServer
-	pb.UnimplementedRemoteUserStoreServer
+	pb.UnimplementedUserStoreHubServiceServer
+	pb.UnimplementedRemoteUserStoreServiceServer
 	mu            sync.Mutex
 	agents        map[string]*organizationConnection
 	responseChans map[string]chan *pb.UserStoreResponse
@@ -43,7 +42,7 @@ type server struct {
 
 func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) (*pb.UserStoreResponse, error) {
 
-	requestID := uuid.New().String() // Generate a UUID for the request ID
+	requestID := req.Id
 	startTime := time.Now()
 
 	log.Printf("Received user store request. Assigned the id: %s", requestID)
@@ -60,19 +59,8 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 	organizationConn, selectedAgentConn = getAgentConnection(s, req.Organization, startTime)
 
 	if selectedAgentConn == nil {
-
 		log.Printf("No available agent connection found for organization: %s", req.Organization)
-
-		errorData, _ := structpb.NewStruct(map[string]interface{}{
-			"status":  "FAIL",
-			"message": "No available agent connection",
-		})
-
-		return &pb.UserStoreResponse{
-			OperationType: req.OperationType,
-			Organization:  req.Organization,
-			Data:          errorData,
-		}, nil
+		return createErrorResponse(req, "No available agent connection"), nil
 	}
 
 	s.mu.Lock()
@@ -107,17 +95,7 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 
 	if err != nil {
 		log.Printf("Error sending request to the agent: %v", err)
-
-		errorData, _ := structpb.NewStruct(map[string]interface{}{
-			"status":  "FAIL",
-			"message": "Error sending request to the agent",
-		})
-
-		return &pb.UserStoreResponse{
-			OperationType: req.OperationType,
-			Organization:  req.Organization,
-			Data:          errorData,
-		}, nil
+		return createErrorResponse(req, "Error sending request to the agent"), nil
 	}
 
 	// Create a new context with the request timeout
@@ -128,49 +106,19 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 	select {
 	case resp := <-responseChan: // Wait for the response on the channel
 		if resp == nil {
-			errorData, _ := structpb.NewStruct(map[string]interface{}{
-				"status":  "FAIL",
-				"message": "Error processing request",
-			})
-
-			return &pb.UserStoreResponse{
-				OperationType: req.OperationType,
-				Organization:  req.Organization,
-				Data:          errorData,
-			}, nil
+			return createErrorResponse(req, "Error processing request"), nil
 		}
-
 		return resp, nil
 	case <-timeoutCtx.Done():
 		log.Printf("Timeout reached for request: %s", requestID)
-
-		errorData, _ := structpb.NewStruct(map[string]interface{}{
-			"status":  "FAIL",
-			"message": "Timeout reached for the request",
-		})
-
-		return &pb.UserStoreResponse{
-			OperationType: req.OperationType,
-			Organization:  req.Organization,
-			Data:          errorData,
-		}, nil
+		return createErrorResponse(req, "Timeout reached for the request"), nil
 	case <-ctx.Done():
 		log.Printf("Context done for request: %s", requestID)
-
-		errorData, _ := structpb.NewStruct(map[string]interface{}{
-			"status":  "FAIL",
-			"message": "Connection closed with the client",
-		})
-
-		return &pb.UserStoreResponse{
-			OperationType: req.OperationType,
-			Organization:  req.Organization,
-			Data:          errorData,
-		}, nil
+		return createErrorResponse(req, "Connection closed with the client"), nil
 	}
 }
 
-func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error {
+func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) error {
 
 	// Receive the initial message to get the organization ID
 	initialMsg, err := stream.Recv()
@@ -189,7 +137,6 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 	s.mu.Lock()
 	if s.agents == nil {
 		s.agents = make(map[string]*organizationConnection)
-
 		s.agents[organization] = &organizationConnection{
 			organization:     organization,
 			agentConnections: []*agentConnection{conn},
@@ -197,7 +144,6 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 		}
 	} else {
 		organizationConn, ok := s.agents[organization]
-
 		if ok {
 			organizationConn.mu.Lock()
 			organizationConn.agentConnections = append(organizationConn.agentConnections, conn)
@@ -222,7 +168,6 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 
 	for {
 		req, err := stream.Recv()
-
 		if err != nil {
 			// Remove the connection on error.
 			s.removeAgentConnection(organization, conn)
@@ -238,6 +183,7 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 
 		if exists {
 			responseChan <- &pb.UserStoreResponse{
+				Id:            req.Id,
 				OperationType: req.OperationType,
 				Organization:  req.Organization,
 				Data:          req.Data,
@@ -248,6 +194,7 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 	}
 }
 
+// Retrieves an agent connection for the given organization
 func getAgentConnection(s *server, organization string, requestStartTime time.Time) (*organizationConnection, *agentConnection) {
 
 	organizationConn, ok := s.agents[organization]
@@ -319,9 +266,20 @@ func (s *server) removeAgentConnection(organization string, conn *agentConnectio
 			break
 		}
 	}
+}
 
-	organizationConn.mu.Unlock()
-	s.mu.Unlock()
+func createErrorResponse(req *pb.UserStoreRequest, message string) *pb.UserStoreResponse {
+
+	errorData, _ := structpb.NewStruct(map[string]interface{}{
+		"status":  "FAIL",
+		"message": message,
+	})
+	return &pb.UserStoreResponse{
+		Id:            req.Id,
+		OperationType: req.OperationType,
+		Organization:  req.Organization,
+		Data:          errorData,
+	}
 }
 
 func main() {
@@ -344,8 +302,8 @@ func main() {
 		responseChans: make(map[string]chan *pb.UserStoreResponse),
 	}
 
-	pb.RegisterRemoteServerServer(grpcServer, s)
-	pb.RegisterRemoteUserStoreServer(grpcServer, s)
+	pb.RegisterRemoteUserStoreServiceServer(grpcServer, s)
+	pb.RegisterUserStoreHubServiceServer(grpcServer, s)
 	log.Println("Intermediate Server listening on port 9004")
 
 	if err := grpcServer.Serve(lis); err != nil {

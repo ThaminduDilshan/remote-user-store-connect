@@ -17,7 +17,7 @@ import (
 const (
 	intermediateServerAddress = "localhost:9004"
 	organization              = "test_org_1"
-	noOfAgentConnections      = 5
+	noOfAgentConnections      = 10
 )
 
 func main() {
@@ -29,13 +29,13 @@ func main() {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			conn, err := grpc.Dial(intermediateServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err := grpc.NewClient(intermediateServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("did not connect: %v", err)
 			}
 			defer conn.Close()
 
-			client := pb.NewRemoteUserStoreClient(conn)
+			client := pb.NewUserStoreHubServiceClient(conn)
 			stream, err := client.Communicate(context.Background())
 			if err != nil {
 				log.Fatalf("could not communicate: %v", err)

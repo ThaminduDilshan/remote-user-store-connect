@@ -10,6 +10,7 @@ import (
 
 	pb "bi-di-user-store-3/proto"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -31,7 +32,7 @@ func main() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	client := pb.NewRemoteServerClient(conn)
+	client := pb.NewRemoteUserStoreServiceClient(conn)
 
 	var wg sync.WaitGroup
 
@@ -49,14 +50,16 @@ func main() {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second) // Increase timeout to 10 seconds
 			defer cancel()
 
+			correlationID := uuid.New().String() // Generate a UUID for the request ID
 			for attempt := 0; attempt < maxRetries; attempt++ {
 				r, err := client.InvokeUserStore(ctx, &pb.UserStoreRequest{
+					Id:            correlationID,
 					OperationType: "DO_AUTHENTICATE",
 					Organization:  "test_org_1",
 					Data:          authData,
 				})
 				if err == nil {
-					log.Printf("UserStore response for request %s: %s", requestID, r.Data.Fields["response"].GetStringValue())
+					log.Printf("UserStore response for request %s: %s, %s", requestID, r.Id, r.Data.Fields["response"].GetStringValue())
 					return
 				}
 

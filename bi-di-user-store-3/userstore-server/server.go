@@ -14,11 +14,23 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// TODO: Need to check if intelligent scale down can terminate a response pending connection.
+
 const (
-	port           = ":9004"
-	maxMsgSize     = 1024 * 1024 * 100 // 100MB
-	requestTimeOut = 15 * time.Second
+	port                 = ":9004"
+	maxMsgSize           = 1024 * 1024 * 100 // 100MB
+	requestTimeOut       = 15 * time.Second
+	maxPerConnectionLoad = 3
 )
+
+type agentMetaData struct {
+	idleConnections         int
+	maxNoOfConnections      int
+	batchConnectionSize     int
+	incRequestedConnections int
+	decRequestedConnections int
+	previousConnCount       int
+}
 
 type agentConnection struct {
 	stream pb.UserStoreHubService_CommunicateServer
@@ -29,6 +41,8 @@ type organizationConnection struct {
 	organization     string
 	agentConnections []*agentConnection
 	freeConnections  int
+	currentLoad      int
+	agentMetadata    agentMetaData
 	mu               sync.Mutex
 }
 
@@ -45,21 +59,32 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 	requestID := req.Id
 	startTime := time.Now()
 
-	log.Printf("Received user store request. Assigned the id: %s", requestID)
+	logInfo("", requestID, "Received user store request. Assigned the id:", requestID)
 
-	if s.agents != nil && s.agents[req.Organization] != nil {
-		log.Printf("Free connections: %d. Current map: %+v",
-			s.agents[req.Organization].freeConnections, s.agents[req.Organization].agentConnections)
+	// Find an available agent connection to handle the request.
+	var organizationConn *organizationConnection = getOrganizationConnection(s, req.Organization)
+
+	if organizationConn == nil {
+		logInfo("", requestID, "No connection pool found for the organization:", req.Organization)
+		return createErrorResponse(req, "No connection pool found for the organization"), nil
 	}
 
-	// Find an available agent connection to handle the request
-	var organizationConn *organizationConnection
-	var selectedAgentConn *agentConnection
+	// Increase the organization load.
+	organizationConn.mu.Lock()
+	organizationConn.currentLoad++
+	organizationConn.mu.Unlock()
 
-	organizationConn, selectedAgentConn = getAgentConnection(s, req.Organization, startTime)
+	log.Printf("Status => Current load: %d, Connections: Total = %d, Free = %d, "+
+		"Inc Requested = %d, Dec Requested = %d",
+		s.agents[req.Organization].currentLoad, len(s.agents[req.Organization].agentConnections),
+		s.agents[req.Organization].freeConnections,
+		s.agents[req.Organization].agentMetadata.incRequestedConnections,
+		s.agents[req.Organization].agentMetadata.decRequestedConnections)
+
+	var selectedAgentConn *agentConnection = getAgentConnection(organizationConn, startTime, 1)
 
 	if selectedAgentConn == nil {
-		log.Printf("No available agent connection found for organization: %s", req.Organization)
+		logInfo("", requestID, "No available agent connection found for organization:", req.Organization)
 		return createErrorResponse(req, "No available agent connection"), nil
 	}
 
@@ -77,6 +102,7 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 		organizationConn.mu.Lock()
 		selectedAgentConn.inUse = false
 		organizationConn.freeConnections++
+		organizationConn.currentLoad--
 		organizationConn.mu.Unlock()
 
 		s.mu.Lock()
@@ -94,7 +120,7 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 	})
 
 	if err != nil {
-		log.Printf("Error sending request to the agent: %v", err)
+		logError("", requestID, "Error sending request to the agent:", err)
 		return createErrorResponse(req, "Error sending request to the agent"), nil
 	}
 
@@ -110,17 +136,17 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 		}
 		return resp, nil
 	case <-timeoutCtx.Done():
-		log.Printf("Timeout reached for request: %s", requestID)
+		logInfo("", requestID, "Timeout reached for the request.")
 		return createErrorResponse(req, "Timeout reached for the request"), nil
 	case <-ctx.Done():
-		log.Printf("Context done for request: %s", requestID)
-		return createErrorResponse(req, "Connection closed with the client"), nil
+		logError("", requestID, "Context done for request.")
+		return createErrorResponse(req, "Context done for request"), nil
 	}
 }
 
 func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) error {
 
-	// Receive the initial message to get the organization ID
+	// Receive the initial message to get the organization ID.
 	initialMsg, err := stream.Recv()
 	if err != nil {
 		return fmt.Errorf("failed to receive initial message: %v", err)
@@ -132,6 +158,23 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 
 	organization := initialMsg.Organization
 	agentID := initialMsg.Id
+
+	// Extract the connection metadata.
+	data := initialMsg.Data.AsMap()
+	idleConnections, ok1 := data["idleConnections"].(float64)
+	maxConnections, ok2 := data["maxConnections"].(float64)
+	batchSize, ok3 := data["batchConnectionSize"].(float64)
+
+	if !ok1 {
+		logError(agentID, "", "idleConnections not found or not a number in initial message data.")
+	}
+	if !ok2 {
+		logError(agentID, "", "maxConnections not found or not a number in initial message data.")
+	}
+	if !ok3 {
+		logError(agentID, "", "batchConnectionSize not found or not a number in initial message data.")
+	}
+
 	conn := &agentConnection{stream: stream, inUse: false}
 
 	s.mu.Lock()
@@ -141,6 +184,11 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 			organization:     organization,
 			agentConnections: []*agentConnection{conn},
 			freeConnections:  1,
+			agentMetadata: agentMetaData{
+				idleConnections:     int(idleConnections),
+				maxNoOfConnections:  int(maxConnections),
+				batchConnectionSize: int(batchSize),
+			},
 		}
 	} else {
 		organizationConn, ok := s.agents[organization]
@@ -148,12 +196,23 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 			organizationConn.mu.Lock()
 			organizationConn.agentConnections = append(organizationConn.agentConnections, conn)
 			organizationConn.freeConnections++
+
+			// This could be a new connection get spawned for a connection increment request.
+			if organizationConn.agentMetadata.incRequestedConnections > 0 {
+				organizationConn.agentMetadata.incRequestedConnections--
+			}
+
 			organizationConn.mu.Unlock()
 		} else {
 			s.agents[organization] = &organizationConnection{
 				organization:     organization,
 				agentConnections: []*agentConnection{conn},
 				freeConnections:  1,
+				agentMetadata: agentMetaData{
+					idleConnections:     int(idleConnections),
+					maxNoOfConnections:  int(maxConnections),
+					batchConnectionSize: int(batchSize),
+				},
 			}
 		}
 	}
@@ -164,62 +223,98 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 
 	s.mu.Unlock()
 
-	log.Printf("Agent connected: %s for organization: %s", agentID, organization)
+	logInfo(agentID, "", "Agent connected for organization:", organization)
 
 	for {
 		req, err := stream.Recv()
 		if err != nil {
 			// Remove the connection on error.
 			s.removeAgentConnection(organization, conn)
-			log.Printf("Agent disconnected: %s", agentID)
+			logInfo(agentID, "", "Agent disconnected from the organization:", organization)
 			return err
 		}
 
 		log.Printf("Received message from agent: %s, OperationType: %s, Organization: %s, Data: %v", req.Id, req.OperationType, req.Organization, req.Data)
+		logInfo(agentID, req.Id, "Received message from agent:", req.Id, req.OperationType, req.Organization, req.Data)
 
-		s.mu.Lock()
-		responseChan, exists := s.responseChans[req.Id] // Find the corresponding response channel
-		s.mu.Unlock()
+		if req.OperationType == "US_RESPONSE" {
+			s.mu.Lock()
+			responseChan, exists := s.responseChans[req.Id] // Find the corresponding response channel
+			s.mu.Unlock()
 
-		if exists {
-			responseChan <- &pb.UserStoreResponse{
-				Id:            req.Id,
-				OperationType: req.OperationType,
-				Organization:  req.Organization,
-				Data:          req.Data,
+			if exists {
+				responseChan <- &pb.UserStoreResponse{
+					Id:            req.Id,
+					OperationType: req.OperationType,
+					Organization:  req.Organization,
+					Data:          req.Data,
+				}
+			} else {
+				logError(agentID, req.Id, "No response channel found for the request.")
+			}
+		} else if req.OperationType == "STATUS_CHECK" {
+			// Check the status and send back the response to scale down.
+
+			// Find an available agent connection to handle the request.
+			var organizationConn *organizationConnection = getOrganizationConnection(s, req.Organization)
+
+			if organizationConn == nil {
+				logError(agentID, req.Id, "No connection pool found for the organization:", req.Organization)
+			} else {
+				log.Printf("Status => Current load: %d, Connections: Total = %d, Free = %d, "+
+					"Inc Requested = %d, Dec Requested = %d",
+					s.agents[req.Organization].currentLoad, len(s.agents[req.Organization].agentConnections),
+					s.agents[req.Organization].freeConnections,
+					s.agents[req.Organization].agentMetadata.incRequestedConnections,
+					s.agents[req.Organization].agentMetadata.decRequestedConnections)
+
+				organizationConn.mu.Lock()
+				sendConnectionDecrementRequest(organizationConn, conn)
+				organizationConn.mu.Unlock()
+			}
+		} else if req.OperationType == "DISCONNECTING" {
+			// Find an available agent connection to handle the request.
+			var organizationConn *organizationConnection = getOrganizationConnection(s, req.Organization)
+
+			if organizationConn == nil {
+				logError(agentID, req.Id, "No connection pool found for the organization:", req.Organization)
+			} else {
+				organizationConn.mu.Lock()
+				organizationConn.agentMetadata.decRequestedConnections--
+				organizationConn.mu.Unlock()
 			}
 		} else {
-			log.Printf("No response channel found for request ID: %s", req.Id)
+			logInfo(agentID, req.Id, "Invalid operation type:", req.OperationType)
 		}
 	}
 }
 
-// Retrieves an agent connection for the given organization
-func getAgentConnection(s *server, organization string, requestStartTime time.Time) (*organizationConnection, *agentConnection) {
+// Retrieves the organization connection.
+func getOrganizationConnection(s *server, organization string, agentId string, correlationId string) *organizationConnection {
 
 	organizationConn, ok := s.agents[organization]
 
 	if !ok {
-		log.Printf("Organization not found in the agent pool: %s", organization)
-		return nil, nil
+		logInfo(agentId, correlationId, "Organization not found in the agent pool:", organization)
+		return nil
 	} else if len(organizationConn.agentConnections) == 0 {
-		log.Printf("No agent connections found for organization: %s", organization)
-		return nil, nil
+		logInfo(agentId, correlationId, "No agent connections found for organization:", organization)
+		return nil
 	}
 
-	return doGetAgentConnection(organizationConn, requestStartTime, 1)
+	return organizationConn
 }
 
-func doGetAgentConnection(organizationConn *organizationConnection, requestStartTime time.Time, retrieveAttempt int) (*organizationConnection, *agentConnection) {
+// Retrieves an agent connection for the given organization.
+func getAgentConnection(organizationConn *organizationConnection, requestStartTime time.Time, retrieveAttempt int) *agentConnection {
 
-	var returnOrgConn *organizationConnection
 	var returnAgentConn *agentConnection
 
 	log.Printf("Retrieving agent connection for organization: %s in attempt: %d", organizationConn.organization, retrieveAttempt)
 
 	if time.Since(requestStartTime) > requestTimeOut {
 		log.Printf("Timeout reached for organization: %s in attempt: %d", organizationConn.organization, retrieveAttempt)
-		return nil, nil
+		return nil
 	}
 
 	organizationConn.mu.Lock()
@@ -228,22 +323,87 @@ func doGetAgentConnection(organizationConn *organizationConnection, requestStart
 		organizationConn.mu.Unlock()
 		log.Printf("No available agent connection found for organization: %s in attempt: %d",
 			organizationConn.organization, retrieveAttempt)
-		return doGetAgentConnection(organizationConn, requestStartTime, retrieveAttempt+1)
+		return getAgentConnection(organizationConn, requestStartTime, retrieveAttempt+1)
 	} else {
 		for _, conn := range organizationConn.agentConnections {
 			if !conn.inUse {
+				log.Printf("Found available agent connection for the organization")
 				conn.inUse = true
 				organizationConn.freeConnections--
-				returnOrgConn = organizationConn
 				returnAgentConn = conn
 				break
 			}
 		}
 
+		// If the picked one is the last left connection, try to to increase the connections based on the load.
+		if organizationConn.freeConnections == 0 &&
+			organizationConn.currentLoad/len(organizationConn.agentConnections) > maxPerConnectionLoad {
+
+			sendConnectionIncrementRequest(organizationConn, returnAgentConn)
+		}
+
 		organizationConn.mu.Unlock()
 	}
 
-	return returnOrgConn, returnAgentConn
+	return returnAgentConn
+}
+
+func sendConnectionIncrementRequest(orgConn *organizationConnection, agentConn *agentConnection) {
+
+	// We assume at this point, org lock is already in possession.
+
+	// Prevent sending increment request when one request is already being processed.
+	totalExpectedConnCount := orgConn.agentMetadata.previousConnCount + orgConn.agentMetadata.incRequestedConnections
+
+	if totalExpectedConnCount != 0 && len(orgConn.agentConnections) == totalExpectedConnCount {
+		orgConn.agentMetadata.previousConnCount = totalExpectedConnCount
+		orgConn.agentMetadata.incRequestedConnections = 0
+	}
+
+	if orgConn.agentMetadata.incRequestedConnections == 0 &&
+		len(orgConn.agentConnections) < orgConn.agentMetadata.maxNoOfConnections {
+
+		log.Printf("Sending connection increment request to the agent for organization: %s", orgConn.organization)
+
+		orgConn.agentMetadata.previousConnCount = len(orgConn.agentConnections)
+		orgConn.agentMetadata.incRequestedConnections = orgConn.agentMetadata.batchConnectionSize
+
+		err := agentConn.stream.Send(&pb.RemoteMessage{
+			Id:            "",
+			OperationType: "INCREASE_CONNECTIONS",
+			Organization:  orgConn.organization,
+			Data:          nil,
+		})
+
+		if err != nil {
+			log.Printf("Error sending connection increment request to the agent: %v", err)
+		}
+	}
+}
+
+func sendConnectionDecrementRequest(orgConn *organizationConnection, agentConn *agentConnection) {
+
+	// We assume at this point, org lock is already in possession.
+
+	currentConnectionCount := len(orgConn.agentConnections)
+	if currentConnectionCount != orgConn.agentMetadata.idleConnections &&
+		orgConn.currentLoad < currentConnectionCount {
+
+		log.Printf("Sending connection decrement request to the agent for organization: %s", orgConn.organization)
+
+		orgConn.agentMetadata.decRequestedConnections++
+
+		err := agentConn.stream.Send(&pb.RemoteMessage{
+			Id:            "",
+			OperationType: "DECREASE_CONNECTIONS",
+			Organization:  orgConn.organization,
+			Data:          nil,
+		})
+
+		if err != nil {
+			log.Printf("Error sending connection decrement request to the agent: %v", err)
+		}
+	}
 }
 
 func (s *server) removeAgentConnection(organization string, conn *agentConnection) {
@@ -266,6 +426,9 @@ func (s *server) removeAgentConnection(organization string, conn *agentConnectio
 			break
 		}
 	}
+
+	organizationConn.mu.Unlock()
+	s.mu.Unlock()
 }
 
 func createErrorResponse(req *pb.UserStoreRequest, message string) *pb.UserStoreResponse {
@@ -308,5 +471,32 @@ func main() {
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+func logInfo(agentId string, correlationId string, message string, data ...any) {
+
+	if agentId == "" {
+		log.Printf("[%s] %s %v", correlationId, message, data)
+	} else {
+		log.Printf("[agent: %s][%s] %s %v", agentId, correlationId, message, data)
+	}
+}
+
+func logError(agentId string, correlationId string, message string, data ...any) {
+
+	if agentId == "" {
+		log.Printf("[%s] ERROR: %s %v", correlationId, message, data)
+	} else {
+		log.Printf("[agent: %s][%s] ERROR: %s %v", agentId, correlationId, message, data)
+	}
+}
+
+func logFatal(agentId string, correlationId string, message string, data ...any) {
+
+	if agentId == "" {
+		log.Fatalf("[%s] FATAL: %s %v", correlationId, message, data)
+	} else {
+		log.Fatalf("[agent: %s][%s] FATAL: %s %v", agentId, correlationId, message, data)
 	}
 }

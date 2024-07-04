@@ -21,16 +21,24 @@ const (
 	requestTimeOut = 15 * time.Second
 )
 
+type connectionMetaData struct {
+	requestedConnections int
+	previousConnCount    int
+	batchSize            int
+}
+
 type agentConnection struct {
 	stream pb.RemoteUserStore_CommunicateServer
 	inUse  bool
 }
 
 type organizationConnection struct {
-	organization     string
-	agentConnections []*agentConnection
-	freeConnections  int
-	mu               sync.Mutex
+	organization            string
+	agentConnections        []*agentConnection
+	freeConnections         int
+	maxSupportedConnections int
+	connectionMetaData      connectionMetaData
+	mu                      sync.Mutex
 }
 
 type server struct {
@@ -184,6 +192,19 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 
 	organization := initialMsg.Organization
 	agentID := initialMsg.Id
+
+	// Extract the noOfMaxConnections from the initial message data
+	data := initialMsg.Data.AsMap()
+	noOfMaxConnections, okMax := data["noOfMaxConnections"].(float64)
+	noOfMinConnections, okMin := data["noOfMinConnections"].(float64)
+
+	if !okMax {
+		log.Printf("noOfMaxConnections not found or not a number in initial message data")
+	}
+	if !okMin {
+		log.Printf("noOfMinConnections not found or not a number in initial message data")
+	}
+
 	conn := &agentConnection{stream: stream, inUse: false}
 
 	s.mu.Lock()
@@ -191,9 +212,13 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 		s.agents = make(map[string]*organizationConnection)
 
 		s.agents[organization] = &organizationConnection{
-			organization:     organization,
-			agentConnections: []*agentConnection{conn},
-			freeConnections:  1,
+			organization:            organization,
+			agentConnections:        []*agentConnection{conn},
+			freeConnections:         1,
+			maxSupportedConnections: int(noOfMaxConnections),
+			connectionMetaData: connectionMetaData{
+				batchSize: int(noOfMinConnections),
+			},
 		}
 	} else {
 		organizationConn, ok := s.agents[organization]
@@ -205,9 +230,13 @@ func (s *server) Communicate(stream pb.RemoteUserStore_CommunicateServer) error 
 			organizationConn.mu.Unlock()
 		} else {
 			s.agents[organization] = &organizationConnection{
-				organization:     organization,
-				agentConnections: []*agentConnection{conn},
-				freeConnections:  1,
+				organization:            organization,
+				agentConnections:        []*agentConnection{conn},
+				freeConnections:         1,
+				maxSupportedConnections: int(noOfMaxConnections),
+				connectionMetaData: connectionMetaData{
+					batchSize: int(noOfMinConnections),
+				},
 			}
 		}
 	}
@@ -293,11 +322,63 @@ func doGetAgentConnection(organizationConn *organizationConnection, requestStart
 			}
 		}
 
-		organizationConn.mu.Unlock()
+		// If the picked one is the last left connection, try to to increase the connections.
+		if organizationConn.freeConnections == 0 {
+			sendConnectionIncrementRequest(organizationConn, returnAgentConn)
+		}
 	}
+
+	organizationConn.mu.Unlock()
 
 	return returnOrgConn, returnAgentConn
 }
+
+func sendConnectionIncrementRequest(orgConn *organizationConnection, agentConn *agentConnection) {
+
+	// We assume at this point, org lock is already in possession.
+
+	// Prevent sending increment request when one request is already being processed.
+	totalExpectedConnCount := orgConn.connectionMetaData.previousConnCount + orgConn.connectionMetaData.requestedConnections
+
+	if totalExpectedConnCount != 0 && len(orgConn.agentConnections) == totalExpectedConnCount {
+		orgConn.connectionMetaData.previousConnCount = totalExpectedConnCount
+		orgConn.connectionMetaData.requestedConnections = 0
+	}
+
+	if len(orgConn.agentConnections) < orgConn.maxSupportedConnections && orgConn.connectionMetaData.requestedConnections == 0 {
+
+		orgConn.connectionMetaData.previousConnCount = len(orgConn.agentConnections)
+		orgConn.connectionMetaData.requestedConnections = orgConn.connectionMetaData.batchSize
+
+		err := agentConn.stream.Send(&pb.RemoteMessage{
+			Id:            "",
+			OperationType: "INCREASE_CONNECTIONS",
+			Organization:  orgConn.organization,
+			Data:          nil,
+		})
+
+		if err != nil {
+			log.Printf("Error sending connection increment request to the agent: %v", err)
+		}
+	}
+}
+
+// // TODO: Simple demo approach.
+// func sendConnectionDecrementRequest(orgConn *organizationConnection, agentConn *agentConnection) {
+
+// 	if len(orgConn.agentConnections) > 2*orgConn.minSupportedConnections {
+// 		err := agentConn.stream.Send(&pb.RemoteMessage{
+// 			Id:            "",
+// 			OperationType: "DECREASE_CONNECTIONS",
+// 			Organization:  orgConn.organization,
+// 			Data:          nil,
+// 		})
+
+// 		if err != nil {
+// 			log.Printf("Error sending connection decrement request to the agent: %v", err)
+// 		}
+// 	}
+// }
 
 func (s *server) removeAgentConnection(organization string, conn *agentConnection) {
 

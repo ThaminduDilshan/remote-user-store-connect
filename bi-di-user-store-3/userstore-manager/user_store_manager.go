@@ -26,6 +26,9 @@ const (
 
 func main() {
 
+	// Record start time.
+	startTime := time.Now()
+
 	// Set up a connection to the server.
 	conn, err := grpc.NewClient(intermediateServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -71,7 +74,10 @@ func main() {
 		}(i)
 	}
 
-	// Wait for all goroutines to finish
+	// Wait for all goroutines to finish.
 	wg.Wait()
-	log.Println("All requests processed")
+
+	// Calculate elapsed time and print.
+	elapsedTime := time.Since(startTime)
+	log.Printf("All requests processed. Took %s to complete.", elapsedTime)
 }

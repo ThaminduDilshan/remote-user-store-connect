@@ -53,13 +53,15 @@ func main() {
 			correlationID := uuid.New().String() // Generate a UUID for the request ID
 			for attempt := 0; attempt < maxRetries; attempt++ {
 				r, err := client.InvokeUserStore(ctx, &pb.UserStoreRequest{
-					Id:            correlationID,
+					CorrelationId: correlationID,
+					RequestId:     correlationID,
 					OperationType: "DO_AUTHENTICATE",
-					Organization:  "test_org_1",
+					Tenant:        "test_tenant_1",
+					UserStore:     "REMOTE1",
 					Data:          authData,
 				})
 				if err == nil {
-					log.Printf("UserStore response for request %s: %s, %s", requestID, r.Id, r.Data.Fields["response"].GetStringValue())
+					log.Printf("UserStore response for request %s: %s", requestID, r.Data.Fields["response"].GetStringValue())
 					return
 				}
 

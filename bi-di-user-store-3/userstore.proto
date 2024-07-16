@@ -16,24 +16,28 @@ service RemoteUserStoreService {
 
 message RemoteMessage {
 
-    string id = 1;
-    string operationType = 2;
-    string organization = 3;
-    google.protobuf.Struct data = 4;
+    string correlationId = 1;
+    string requestId = 2;
+    string operationType = 3;
+    string tenant = 4;
+    string userStore = 5;
+    google.protobuf.Struct data = 6;
 }
 
 message UserStoreRequest {
 
-    string id = 1;
-    string operationType = 2;
-    string organization = 3;
-    google.protobuf.Struct data = 4;
+    string correlationId = 1;
+    string requestId = 2;
+    string operationType = 3;
+    string tenant = 4;
+    string userStore = 5;
+    google.protobuf.Struct data = 6;
 }
 
 message UserStoreResponse {
 
-    string id = 1;
-    string operationType = 2;
-    string organization = 3;
+    string correlationId = 1;
+    string requestId = 2;
+    string operationType = 3;
     google.protobuf.Struct data = 4;
 }

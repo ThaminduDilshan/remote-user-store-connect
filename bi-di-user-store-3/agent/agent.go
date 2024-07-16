@@ -16,7 +16,8 @@ import (
 
 const (
 	intermediateServerAddress = "localhost:9004"
-	organization              = "test_org_1"
+	tenant                    = "test_tenant_1"
+	userStore                 = "REMOTE1"
 	noOfAgentConnections      = 10
 )
 
@@ -44,11 +45,12 @@ func main() {
 
 			log.Printf("Agent %d: Connection established", i)
 
-			// Send initial connection message with organization ID
+			// Send initial connection message with tenant ID.
 			connectMessage := &pb.RemoteMessage{
 				OperationType: "CLIENT_CONNECT",
-				Id:            uuid.New().String(),
-				Organization:  organization,
+				RequestId:     uuid.New().String(),
+				Tenant:        tenant,
+				UserStore:     userStore,
 				Data:          &structpb.Struct{},
 			}
 			if err := stream.Send(connectMessage); err != nil {
@@ -64,7 +66,7 @@ func main() {
 					}
 					log.Fatalf("Agent %d: failed to receive: %v", i, err)
 				}
-				log.Printf("Agent %d: Received request: %s with data: %v", i, req.Id, req.Data)
+				log.Printf("Agent %d: Received request: %s with data: %v", i, req.RequestId, req.Data)
 
 				var response string
 				if req.OperationType == "DO_AUTHENTICATE" {
@@ -79,10 +81,17 @@ func main() {
 				responseData, _ := structpb.NewStruct(map[string]interface{}{
 					"response": response,
 				})
-				if err := stream.Send(&pb.RemoteMessage{Id: req.Id, OperationType: req.OperationType, Organization: req.Organization, Data: responseData}); err != nil {
+				if err := stream.Send(&pb.RemoteMessage{
+					CorrelationId: req.CorrelationId,
+					RequestId:     req.RequestId,
+					OperationType: req.OperationType,
+					Tenant:        tenant,
+					UserStore:     userStore,
+					Data:          responseData,
+				}); err != nil {
 					log.Fatalf("Agent %d: failed to send response: %v", i, err)
 				}
-				log.Printf("Agent %d: Sent response for request: %s", i, req.Id)
+				log.Printf("Agent %d: Sent response for request: %s", i, req.RequestId)
 			}
 		}(i)
 	}

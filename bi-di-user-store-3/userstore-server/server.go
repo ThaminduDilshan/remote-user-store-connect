@@ -23,6 +23,7 @@ const (
 type agentConnection struct {
 	stream pb.UserStoreHubService_CommunicateServer
 	inUse  bool
+	wg     sync.WaitGroup
 }
 
 type organizationConnection struct {
@@ -35,9 +36,8 @@ type organizationConnection struct {
 type server struct {
 	pb.UnimplementedUserStoreHubServiceServer
 	pb.UnimplementedRemoteUserStoreServiceServer
-	mu            sync.Mutex
-	agents        map[string]*organizationConnection
-	responseChans map[string]chan *pb.UserStoreResponse
+	mu     sync.Mutex
+	agents map[string]*organizationConnection
 }
 
 func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) (*pb.UserStoreResponse, error) {
@@ -63,27 +63,11 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 		return createErrorResponse(req, "No available agent connection"), nil
 	}
 
-	s.mu.Lock()
-
-	if s.responseChans == nil {
-		s.responseChans = make(map[string]chan *pb.UserStoreResponse)
-	}
-	responseChan := make(chan *pb.UserStoreResponse, 1)
-	s.responseChans[requestID] = responseChan // Store the response channel in the map
-
-	s.mu.Unlock()
-
 	defer func() {
 		organizationConn.mu.Lock()
 		selectedAgentConn.inUse = false
 		organizationConn.freeConnections++
 		organizationConn.mu.Unlock()
-
-		s.mu.Lock()
-		delete(s.responseChans, requestID) // Clean up the response channel
-		s.mu.Unlock()
-
-		close(responseChan)
 	}()
 
 	err := selectedAgentConn.stream.Send(&pb.RemoteMessage{
@@ -98,23 +82,23 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 		return createErrorResponse(req, "Error sending request to the agent"), nil
 	}
 
-	// Create a new context with the request timeout
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, requestTimeOut)
-	defer timeoutCancel()
+	// TODO: We should be able to listen for the response here without response channels.
 
-	// Wait for the response
-	select {
-	case resp := <-responseChan: // Wait for the response on the channel
-		if resp == nil {
-			return createErrorResponse(req, "Error processing request"), nil
+	for {
+		response, err := selectedAgentConn.stream.Recv()
+		if err != nil {
+			log.Printf("Error receiving response from the agent: %v", err)
+			return createErrorResponse(req, "Error receiving response from the agent"), nil
 		}
-		return resp, nil
-	case <-timeoutCtx.Done():
-		log.Printf("Timeout reached for request: %s", requestID)
-		return createErrorResponse(req, "Timeout reached for the request"), nil
-	case <-ctx.Done():
-		log.Printf("Context done for request: %s", requestID)
-		return createErrorResponse(req, "Connection closed with the client"), nil
+
+		log.Printf("Received message from agent: %s, OperationType: %s, Organization: %s, Data: %v", req.Id, req.OperationType, req.Organization, req.Data)
+
+		return &pb.UserStoreResponse{
+			Id:            response.Id,
+			OperationType: response.OperationType,
+			Organization:  response.Organization,
+			Data:          response.Data,
+		}, nil
 	}
 }
 
@@ -158,40 +142,31 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 		}
 	}
 
-	if s.responseChans == nil {
-		s.responseChans = make(map[string]chan *pb.UserStoreResponse)
-	}
-
 	s.mu.Unlock()
 
 	log.Printf("Agent connected: %s for organization: %s", agentID, organization)
 
-	for {
-		req, err := stream.Recv()
-		if err != nil {
-			// Remove the connection on error.
-			s.removeAgentConnection(organization, conn)
-			log.Printf("Agent disconnected: %s", agentID)
-			return err
-		}
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-		log.Printf("Received message from agent: %s, OperationType: %s, Organization: %s, Data: %v", req.Id, req.OperationType, req.Organization, req.Data)
+	wg.Wait()
+	return nil
 
-		s.mu.Lock()
-		responseChan, exists := s.responseChans[req.Id] // Find the corresponding response channel
-		s.mu.Unlock()
+	// for {
+	// 	log.Printf("Alive...: %s", agentID)
+	// }
 
-		if exists {
-			responseChan <- &pb.UserStoreResponse{
-				Id:            req.Id,
-				OperationType: req.OperationType,
-				Organization:  req.Organization,
-				Data:          req.Data,
-			}
-		} else {
-			log.Printf("No response channel found for request ID: %s", req.Id)
-		}
-	}
+	// for {
+	// 	req, err := stream.Recv()
+	// 	if err != nil {
+	// 		// Remove the connection on error.
+	// 		s.removeAgentConnection(organization, conn)
+	// 		log.Printf("Agent disconnected: %s", agentID)
+	// 		return err
+	// 	}
+
+	// 	log.Printf("Received message from agent: %s, OperationType: %s, Organization: %s, Data: %v", req.Id, req.OperationType, req.Organization, req.Data)
+	// }
 }
 
 // Retrieves an agent connection for the given organization
@@ -298,8 +273,7 @@ func main() {
 	)
 
 	s := &server{
-		agents:        make(map[string]*organizationConnection),
-		responseChans: make(map[string]chan *pb.UserStoreResponse),
+		agents: make(map[string]*organizationConnection),
 	}
 
 	pb.RegisterRemoteUserStoreServiceServer(grpcServer, s)

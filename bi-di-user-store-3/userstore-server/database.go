@@ -15,17 +15,15 @@ type TokenRecord struct {
 	DOMAIN string
 }
 
-const (
-	dbServer   = "localhost"
-	dbPort     = 1433
-	dbUser     = ""
-	dbPassword = ""
-	database   = ""
-)
+func getDBConnection(config Config) *sql.DB {
 
-func getDBConnection() *sql.DB {
-
-	connectionString := fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d;database=%s", dbServer, dbUser, dbPassword, dbPort, database)
+	connectionString := fmt.Sprintf("server=%s;user id=%s;password=%s;port=%d;database=%s",
+		config.Database.Host,
+		config.Database.User,
+		config.Database.Password,
+		config.Database.Port,
+		config.Database.Name,
+	)
 
 	// Open DB connection.
 	db, err := sql.Open("sqlserver", connectionString)
@@ -58,7 +56,7 @@ func getToken(s *server, token string) (*TokenRecord, error) {
 	// Retrieve token from database.
 	query := "SELECT ID, TOKEN, TENANT, DOMAIN FROM AGENT_ACCESS_TOKEN WHERE TOKEN=@TOKEN"
 
-	db := getDBConnection()
+	db := getDBConnection(s.config)
 
 	// Prepare the query.
 	stmt, err := db.Prepare(query)

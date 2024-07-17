@@ -1,0 +1,13 @@
+[system]
+id = "agent-1"
+tenant = "test_tenant_1"
+user_store = "REMOTE1"
+idle_connections = 10
+
+[security]
+token = "0ff93c70d1eb86972e1b9ac69cc8540bf8acf5a2021fe9dbfb621bb8c793c74c"
+# token = "abcdd-1234-efgh-5678"
+
+[hub_service]
+host = "localhost"
+port = 9004

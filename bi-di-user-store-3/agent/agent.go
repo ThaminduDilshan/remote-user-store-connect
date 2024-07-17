@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"strconv"
 	"sync"
 
 	pb "bi-di-user-store-3/proto"
@@ -15,22 +16,17 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-const (
-	intermediateServerAddress = "localhost:9004"
-	tenant                    = "test_tenant_1"
-	userStore                 = "REMOTE1"
-	noOfAgentConnections      = 10
-)
-
-// const agentInstallationToken = "abcdd-1234-efgh-5678"
-const agentInstallationToken = "0ff93c70d1eb86972e1b9ac69cc8540bf8acf5a2021fe9dbfb621bb8c793c74c"
-
 func main() {
 
 	log.Println("Starting Local Agent...")
 	var wg sync.WaitGroup
 
-	for i := 0; i < noOfAgentConnections; i++ { // Start 5 connections for load handling
+	log.Println("Reading configurations.")
+	config := readConfig()
+
+	hubServiceAddress := config.HubService.Host + ":" + strconv.Itoa(config.HubService.Port)
+
+	for i := 0; i < config.System.NoOfIdleConnections; i++ { // Start 5 connections for load handling
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -38,7 +34,7 @@ func main() {
 			agentId := uuid.New().String()
 			log.Printf("Agent conn %s: Starting connection with the server", agentId)
 
-			conn, err := grpc.NewClient(intermediateServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err := grpc.NewClient(hubServiceAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
 				log.Fatalf("did not connect: %v", err)
 			}
@@ -47,7 +43,7 @@ func main() {
 			client := pb.NewUserStoreHubServiceClient(conn)
 
 			// Authentication.
-			md := metadata.Pairs("authorization", "Bearer "+agentInstallationToken)
+			md := metadata.Pairs("authorization", "Bearer "+config.Security.Token)
 			ctx := metadata.NewOutgoingContext(context.Background(), md)
 
 			stream, err := client.Communicate(ctx)
@@ -62,8 +58,8 @@ func main() {
 			connectMessage := &pb.RemoteMessage{
 				OperationType: "CLIENT_CONNECT",
 				RequestId:     agentId,
-				Tenant:        tenant,
-				UserStore:     userStore,
+				Tenant:        config.System.Tenant,
+				UserStore:     config.System.UserStore,
 				Data:          &structpb.Struct{},
 			}
 			if err := stream.Send(connectMessage); err != nil {
@@ -104,8 +100,8 @@ func main() {
 					CorrelationId: req.CorrelationId,
 					RequestId:     req.RequestId,
 					OperationType: req.OperationType,
-					Tenant:        tenant,
-					UserStore:     userStore,
+					Tenant:        config.System.Tenant,
+					UserStore:     config.System.UserStore,
 					Data:          responseData,
 				}); err != nil {
 					log.Fatalf("Agent conn %s: failed to send response: %v", agentId, err)

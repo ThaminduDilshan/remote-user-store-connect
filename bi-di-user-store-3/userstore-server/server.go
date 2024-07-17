@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,14 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-const (
-	port              = ":9004"
-	maxMsgSize        = 1024 * 1024 * 100 // 100MB
-	requestTimeOut    = 15 * time.Second
-	agentKeySeperator = "_"
-)
-
-const serverId = "server1"
+const agentKeySeperator = "_"
 
 // const agentInstallationToken = "abcdd-1234-efgh-5678"
 
@@ -49,6 +43,7 @@ type server struct {
 	agents        map[string]*tenantConnection
 	responseChans map[string]chan *pb.UserStoreResponse
 	tokenCache    map[string]TokenRecord
+	config        Config
 }
 
 func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) (*pb.UserStoreResponse, error) {
@@ -57,6 +52,7 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 	requestID := req.RequestId
 	agentKey := req.Tenant + agentKeySeperator + req.UserStore
 	startTime := time.Now()
+	requestTimeOut := time.Duration(s.config.ConnectionParam.RequestTimeout) * time.Second
 
 	log.Printf("Received user store request with correlation id: %s, request id: %s", correlationId, requestID)
 
@@ -69,7 +65,7 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 	var tenantConn *tenantConnection
 	var selectedAgentConn *agentConnection
 
-	tenantConn, selectedAgentConn = getAgentConnection(s, agentKey, startTime)
+	tenantConn, selectedAgentConn = getAgentConnection(s, agentKey, startTime, requestTimeOut)
 
 	if selectedAgentConn == nil {
 		log.Printf("No available agent connection found for tenant: %s and user store: %s", req.Tenant, req.UserStore)
@@ -113,7 +109,7 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 		return createErrorResponse(req, "Error sending request to the agent"), nil
 	}
 
-	// Create a new context with the request timeout
+	// Create a new context with the request timeout.
 	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, requestTimeOut)
 	defer timeoutCancel()
 
@@ -134,10 +130,6 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 }
 
 func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) error {
-
-	if s.tokenCache == nil {
-		s.tokenCache = make(map[string]TokenRecord)
-	}
 
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
@@ -224,7 +216,7 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 	// Send connection success message to the agent.
 	connectResponse := &pb.RemoteMessage{
 		OperationType: "SERVER_CONNECTED",
-		RequestId:     serverId,
+		RequestId:     s.config.Server.Id,
 		Tenant:        tenant,
 		UserStore:     userStore,
 		Data:          &structpb.Struct{},
@@ -265,7 +257,7 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 }
 
 // Retrieves an agent connection for the given agentKey.
-func getAgentConnection(s *server, agentKey string, requestStartTime time.Time) (*tenantConnection, *agentConnection) {
+func getAgentConnection(s *server, agentKey string, requestStartTime time.Time, requestTimeOut time.Duration) (*tenantConnection, *agentConnection) {
 
 	tenantConn, ok := s.agents[agentKey]
 
@@ -277,10 +269,10 @@ func getAgentConnection(s *server, agentKey string, requestStartTime time.Time) 
 		return nil, nil
 	}
 
-	return doGetAgentConnection(tenantConn, requestStartTime, 1)
+	return doGetAgentConnection(tenantConn, requestStartTime, requestTimeOut, 1)
 }
 
-func doGetAgentConnection(tenantConn *tenantConnection, requestStartTime time.Time, retrieveAttempt int) (*tenantConnection, *agentConnection) {
+func doGetAgentConnection(tenantConn *tenantConnection, requestStartTime time.Time, requestTimeOut time.Duration, retrieveAttempt int) (*tenantConnection, *agentConnection) {
 
 	var returnTenantConn *tenantConnection
 	var returnAgentConn *agentConnection
@@ -298,7 +290,7 @@ func doGetAgentConnection(tenantConn *tenantConnection, requestStartTime time.Ti
 		tenantConn.mu.Unlock()
 		log.Printf("No available agent connection found for tenant: %s in attempt: %d",
 			tenantConn.tenant, retrieveAttempt)
-		return doGetAgentConnection(tenantConn, requestStartTime, retrieveAttempt+1)
+		return doGetAgentConnection(tenantConn, requestStartTime, requestTimeOut, retrieveAttempt+1)
 	} else {
 		for _, conn := range tenantConn.agentConnections {
 			if !conn.inUse {
@@ -357,26 +349,34 @@ func createErrorResponse(req *pb.UserStoreRequest, message string) *pb.UserStore
 
 func main() {
 
-	log.Println("Starting Intermediate Server...")
+	log.Println("Starting user store hub server...")
 
-	lis, err := net.Listen("tcp", port)
+	log.Println("Reading the configuration file.")
+	config := readConfig()
+
+	address := config.Server.Host + ":" + strconv.Itoa(config.Server.Port)
+
+	lis, err := net.Listen("tcp", address)
 
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
 	grpcServer := grpc.NewServer(
-		grpc.MaxRecvMsgSize(maxMsgSize),
-		grpc.MaxSendMsgSize(maxMsgSize),
+		grpc.MaxRecvMsgSize(config.ConnectionParam.MaxMessageSize),
+		grpc.MaxSendMsgSize(config.ConnectionParam.MaxMessageSize),
 	)
 
 	s := &server{
 		agents:        make(map[string]*tenantConnection),
 		responseChans: make(map[string]chan *pb.UserStoreResponse),
+		tokenCache:    make(map[string]TokenRecord),
+		config:        config,
 	}
 
 	pb.RegisterRemoteUserStoreServiceServer(grpcServer, s)
 	pb.RegisterUserStoreHubServiceServer(grpcServer, s)
+
 	log.Println("Intermediate Server listening on port 9004")
 
 	if err := grpcServer.Serve(lis); err != nil {

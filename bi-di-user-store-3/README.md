@@ -32,4 +32,4 @@ The GRPC server exposes a GRPC endpoint to connect from third party applications
 
 1. Start a MSSQL server database and create a database named `dbIdentityAgent`.
 2. Run the SQL script `resources/db_script.sql` to create the required tables.
-3. Configure the database connection variables in the `userstore-server/database.go` file.
+3. Configure the database connection variables in the `userstore-server/deployment.toml` file.

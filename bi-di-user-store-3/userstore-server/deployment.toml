@@ -1,0 +1,15 @@
+[server]
+id = "server-1"
+host = "localhost"
+port = 9004
+
+[connection_param]
+max_message_size = 104857600
+request_timeout = 15
+
+[database]
+host = "localhost"
+port = 1433
+user = ""
+password = ""
+name = ""

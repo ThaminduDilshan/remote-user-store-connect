@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
 	pb "bi-di-user-store-3/proto"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -20,6 +24,10 @@ const (
 	requestTimeOut    = 15 * time.Second
 	agentKeySeperator = "_"
 )
+
+const serverId = "server1"
+
+// const agentInstallationToken = "abcdd-1234-efgh-5678"
 
 type agentConnection struct {
 	stream pb.UserStoreHubService_CommunicateServer
@@ -40,6 +48,7 @@ type server struct {
 	mu            sync.Mutex
 	agents        map[string]*tenantConnection
 	responseChans map[string]chan *pb.UserStoreResponse
+	tokenCache    map[string]TokenRecord
 }
 
 func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) (*pb.UserStoreResponse, error) {
@@ -126,6 +135,43 @@ func (s *server) InvokeUserStore(ctx context.Context, req *pb.UserStoreRequest) 
 
 func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) error {
 
+	if s.tokenCache == nil {
+		s.tokenCache = make(map[string]TokenRecord)
+	}
+
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		// return fmt.Errorf("failed to get metadata")
+		return status.Errorf(codes.Unauthenticated, "unauthorized. Failed to retrieve metadata")
+	}
+	tokens := md.Get("authorization")
+
+	if len(tokens) == 0 {
+		// return fmt.Errorf("unauthorized. Invalid installation token")
+		return status.Errorf(codes.Unauthenticated, "unauthorized. Invalid installation token")
+	}
+
+	accessToken := strings.TrimPrefix(tokens[0], "Bearer ")
+	accessToken = strings.TrimSpace(accessToken)
+
+	// Validate the installation token.
+	savedToken, err := getToken(s, accessToken)
+	if err != nil {
+		// return fmt.Errorf("unauthorized. Invalid installation token: %v", err)
+		return status.Errorf(codes.Unauthenticated, "unauthorized. Invalid installation token: %v", err)
+	}
+
+	if savedToken.TOKEN != accessToken {
+		// return fmt.Errorf("unauthorized. Invalid installation token")
+		return status.Errorf(codes.Unauthenticated, "unauthorized. Invalid installation token")
+	} else {
+		log.Println("Installation token verified")
+	}
+
+	// if len(accessToken) == 0 || accessToken != "Bearer "+agentInstallationToken {
+	// 	return fmt.Errorf("Unauthorized. Invalid installation token.")
+	// }
+
 	// Receive the initial message to get the tenant ID and user store ID.
 	initialMsg, err := stream.Recv()
 	if err != nil {
@@ -174,6 +220,19 @@ func (s *server) Communicate(stream pb.UserStoreHubService_CommunicateServer) er
 	}
 
 	s.mu.Unlock()
+
+	// Send connection success message to the agent.
+	connectResponse := &pb.RemoteMessage{
+		OperationType: "SERVER_CONNECTED",
+		RequestId:     serverId,
+		Tenant:        tenant,
+		UserStore:     userStore,
+		Data:          &structpb.Struct{},
+	}
+
+	if err := stream.Send(connectResponse); err != nil {
+		return fmt.Errorf("failed to send connection success response to the agent: %s. Error: %v", agentID, err)
+	}
 
 	log.Printf("Agent with id: %s connected for tenant: %s and user store: %s", agentID, tenant, userStore)
 
@@ -266,6 +325,7 @@ func (s *server) removeAgentConnection(agentKey string, conn *agentConnection) {
 		s.mu.Unlock()
 		return
 	}
+	s.mu.Unlock()
 
 	tenantConn.mu.Lock()
 
@@ -277,6 +337,8 @@ func (s *server) removeAgentConnection(agentKey string, conn *agentConnection) {
 			break
 		}
 	}
+
+	tenantConn.mu.Unlock()
 }
 
 func createErrorResponse(req *pb.UserStoreRequest, message string) *pb.UserStoreResponse {

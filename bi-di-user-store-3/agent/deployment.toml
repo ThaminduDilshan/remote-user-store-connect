@@ -5,9 +5,11 @@ user_store = "REMOTE1"
 idle_connections = 10
 
 [security]
-token = "0ff93c70d1eb86972e1b9ac69cc8540bf8acf5a2021fe9dbfb621bb8c793c74c"
-# token = "abcdd-1234-efgh-5678"
+token = "$secret{token}"
 
 [hub_service]
 host = "localhost"
 port = 9004
+
+[secrets]
+token = "71ba5543e71db73d1e4e640d46601bc63820204a2e8017adb5f1ffca58dc1838ca873edb46b4ecb6ee7258c8cd4bc5acf59771f9220f0b5e328a7909ca9d3046b7856420821dd5dbfbf03d07b50530ee4f757b1ff21bfa9739bad816"

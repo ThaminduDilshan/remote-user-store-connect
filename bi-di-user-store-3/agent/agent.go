@@ -4,9 +4,13 @@ import (
 	"context"
 	"io"
 	"log"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 
+	"bi-di-user-store-3/agent/config"
+	"bi-di-user-store-3/agent/sec_vault"
 	pb "bi-di-user-store-3/proto"
 
 	"github.com/google/uuid"
@@ -22,7 +26,13 @@ func main() {
 	var wg sync.WaitGroup
 
 	log.Println("Reading configurations.")
-	config := readConfig()
+	config := config.ReadConfig("deployment.toml")
+
+	// Read the AES key from environment variables.
+	encSecretKey, keyExists := os.LookupEnv("SECRET_KEY")
+	if keyExists && encSecretKey != "" {
+		log.Println("Secret key found in the environment variables.")
+	}
 
 	hubServiceAddress := config.HubService.Host + ":" + strconv.Itoa(config.HubService.Port)
 
@@ -43,7 +53,19 @@ func main() {
 			client := pb.NewUserStoreHubServiceClient(conn)
 
 			// Authentication.
-			md := metadata.Pairs("authorization", "Bearer "+config.Security.Token)
+			agentToken := config.Security.Token
+
+			if agentToken == "" {
+				log.Fatalf("Agent conn %s: Agent token not found", agentId)
+			} else if strings.Contains(agentToken, sec_vault.SECRET_KEY_PREFIX) {
+				agentToken, err = sec_vault.ResolveSecret(agentToken, config, encSecretKey)
+
+				if err != nil {
+					log.Fatalf("Agent conn %s: Failed to resolve secret: %v", agentId, err)
+				}
+			}
+
+			md := metadata.Pairs("authorization", "Bearer "+agentToken)
 			ctx := metadata.NewOutgoingContext(context.Background(), md)
 
 			stream, err := client.Communicate(ctx)
